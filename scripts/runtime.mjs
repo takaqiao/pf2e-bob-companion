@@ -5,9 +5,12 @@ export const DEFAULT_CONFIG = Object.freeze({enabled: true, chapter: 0, phase: '
 const TARGET = 'CONFIG.Actor.documentClass.prototype.prepareRuleElements';
 const touched = new Map();
 const preparing = new WeakSet();
+const preparedSignatures = new WeakMap();
+const pendingActors = new Set();
 let installed = false;
 let registered = false;
 let refreshTimer;
+let fullRefreshPending = false;
 let lastEnvironmentKey;
 let lastError = null;
 let errorNotified = false;
@@ -61,9 +64,14 @@ function actorStatus(actor) {
 
   const activeScene = game.scenes?.active;
   const token = actor.isToken ? actor.token : null;
+  if (actor.isToken && (!token || token.actorLink || token.actorId !== actor.id)) {
+    return {...result, reason: '此合成角色已不属于原棋子。'};
+  }
   const tokens = token ? [token] : Array.from(activeScene?.tokens ?? []).filter(document => document.actorLink && document.actorId === actor.id);
+  const sceneId = token?.parent?.id ?? tokens[0]?.parent?.id ?? flags(actor).sceneId;
+  const scene = game.scenes?.get(sceneId);
   const scope = resolveScope({isToken: actor.isToken, tokenId: token?.id, tokens: tokens.map(tokenData),
-    scenes: Array.from(game.scenes ?? [], sceneData), activeSceneId: activeScene?.id,
+    scenes: scene ? [sceneData(scene)] : [], activeSceneId: activeScene?.id,
     actorFlags: flags(actor), mainSceneId: MAIN_SCENE});
   Object.assign(result, {sceneId: scope.sceneId, exposure: scope.exposure, perception: scope.perception, reason: scope.reason});
   if (!scope.enabled) return result;
@@ -92,13 +100,21 @@ export function status(actor) {
   return result;
 }
 
+// Only changes to the rules we add/suppress require another native preparation.
+function ruleSignature(state) {
+  return JSON.stringify([state.enabled, state.managedWeather, state.rules]);
+}
+
 function prepareRules(wrapped, ...args) {
   const original = wrapped(...args);
   if (preparing.has(this)) return original;
   preparing.add(this);
   try {
     const state = actorStatus(this);
-    if (!state.enabled) return original;
+    if (!state.enabled) {
+      preparedSignatures.set(this, ruleSignature(state));
+      return original;
+    }
     let additional = [];
     if (state.rules.length) {
       const source = {name: 'BoB：昼夜与章节环境', type: 'effect', img: 'systems/pf2e/icons/default-icons/effect.svg',
@@ -116,7 +132,9 @@ function prepareRules(wrapped, ...args) {
     if (this.uuid && (game.actors.get(this.id) === this || this.isToken)) {
       touched.set(this.uuid, new WeakRef(this));
     }
-    return [...retained, ...additional].filter(rule => !rule.ignored).sort((a, b) => a.priority - b.priority);
+    const rules = [...retained, ...additional].filter(rule => !rule.ignored).sort((a, b) => a.priority - b.priority);
+    preparedSignatures.set(this, ruleSignature(state));
+    return rules;
   } catch (error) {
     lastError = 'BoB 临时规则准备失败；已保留角色原有规则。';
     console.error(`${ID} | ${lastError}`, error);
@@ -131,6 +149,9 @@ function prepareRules(wrapped, ...args) {
 /** Reset already relevant/constructed actors only. This never writes a document. */
 export function refresh() {
   if (!globalThis.game?.ready || !installed) return;
+  clearTimeout(refreshTimer);
+  fullRefreshPending = false;
+  pendingActors.clear();
   lastEnvironmentKey = environmentKey();
   lastError = null;
   const actors = new Set(Array.from(touched.values(), ref => ref.deref()).filter(Boolean));
@@ -156,9 +177,43 @@ export function refresh() {
   Hooks.callAll(`${ID}.refresh`, getEnvironment());
 }
 
-function queueRefresh() {
+function flushRefresh() {
+  if (fullRefreshPending) return refresh();
+  const actors = [...pendingActors];
+  pendingActors.clear();
+  if (!globalThis.game?.ready || !installed || !config().enabled) return;
+  let changed = false;
+  for (const actor of actors) {
+    if (preparing.has(actor)) continue;
+    try {
+      const state = actorStatus(actor);
+      if (!state.enabled && !preparedSignatures.has(actor)) continue;
+      if (preparedSignatures.get(actor) === ruleSignature(state)) continue;
+      actor.reset();
+      actor.render?.(false);
+      changed = true;
+    } catch (error) { console.error(`${ID} | 无法刷新 ${actor.uuid}`, error); }
+  }
+  if (changed) Hooks.callAll(`${ID}.refresh`, getEnvironment());
+}
+
+function scheduleRefresh() {
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(refresh, 50);
+  refreshTimer = setTimeout(flushRefresh, 50);
+}
+
+function queueRefresh() {
+  fullRefreshPending = true;
+  scheduleRefresh();
+}
+
+function queueTokenRefresh(token) {
+  if (!globalThis.game?.ready || !installed || !config().enabled) return;
+  // Never construct a synthetic actor merely because its token moved.
+  const actor = token.actorLink ? game.actors.get(token.actorId) : token.hasConstructedActor ? token.actor : null;
+  if (!actor) return;
+  pendingActors.add(actor);
+  scheduleRefresh();
 }
 
 function environmentKey() {
@@ -170,6 +225,21 @@ function environmentKey() {
 function hasChange(changes, names) {
   return names.some(name => Object.keys(changes).some(key => key === name || key.startsWith(`${name}.`))
     || name.split('.').reduce((value, key) => value && Object.hasOwn(value, key) ? value[key] : undefined, changes) !== undefined);
+}
+
+function hasModuleFlagsChange(changes) {
+  const namespace = key => key.split('.')[0].replace(/^-=/, '');
+  for (const [key, value] of Object.entries(changes)) {
+    if (key === '-=flags') return true;
+    if (key.startsWith('flags.')) {
+      if (namespace(key.slice(6)) === ID) return true;
+    } else if (key === 'flags') {
+      // A whole flags replacement/deletion may remove our former namespace.
+      if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length) return true;
+      if (Object.keys(value).some(key => namespace(key) === ID)) return true;
+    }
+  }
+  return false;
 }
 
 export function registerRuntime() {
@@ -200,9 +270,12 @@ export function registerRuntime() {
   Hooks.on('updateSetting', setting => {
     if ([`${OFFICIAL}.campaign`, 'pf2e.worldClock'].includes(setting.key)) queueRefresh();
   });
-  Hooks.on('updateScene', (_scene, changes) => { if (hasChange(changes, ['active', 'flags'])) queueRefresh(); });
+  Hooks.on('updateScene', (_scene, changes) => { if (hasChange(changes, ['active']) || hasModuleFlagsChange(changes)) queueRefresh(); });
   for (const hook of ['canvasReady', 'createScene', 'deleteScene', 'createToken', 'deleteToken', 'createRegion', 'deleteRegion']) Hooks.on(hook, queueRefresh);
-  Hooks.on('updateToken', (_token, changes) => { if (hasChange(changes, ['flags', 'actorId', 'actorLink', 'disposition', 'x', 'y', 'elevation', 'regions'])) queueRefresh(); });
-  Hooks.on('updateRegion', (_region, changes) => { if (hasChange(changes, ['flags', 'shapes', 'elevation', 'disabled'])) queueRefresh(); });
+  Hooks.on('updateToken', (token, changes) => {
+    if (hasChange(changes, ['actorId', 'actorLink', 'disposition']) || hasModuleFlagsChange(changes)) queueRefresh();
+    else if (hasChange(changes, ['x', 'y', 'elevation', 'regions', '_regions'])) queueTokenRefresh(token);
+  });
+  Hooks.on('updateRegion', (_region, changes) => { if (hasChange(changes, ['shapes', 'elevation', 'disabled']) || hasModuleFlagsChange(changes)) queueRefresh(); });
   Hooks.on('updateActor', (_actor, changes) => { if (hasChange(changes, [`flags.${ID}`, 'ownership', 'system.details.alliance', 'system.traits.value'])) queueRefresh(); });
 }
