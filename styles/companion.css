@@ -1,0 +1,10 @@
+.bob-companion .dialog-content { max-height: 68vh; overflow-y: auto; }
+.bob-companion .bob-summary { border-left: 3px solid #916530; padding: .5rem .8rem; margin-bottom: .8rem; }
+.bob-companion .bob-summary p { margin: .3rem 0; }
+.bob-companion .bob-field { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: .55rem 0; }
+.bob-companion .bob-field select { max-width: 60%; }
+.bob-companion .bob-field input[type=time] { width: 6.5rem; }
+.bob-companion fieldset { margin: .65rem 0; padding: .3rem .7rem; }
+.bob-companion details { margin: .8rem 0; }
+.bob-companion .hint { font-size: .85em; opacity: .8; }
+.bob-companion .dialog-buttons { flex-wrap: wrap; }
