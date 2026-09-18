@@ -9,8 +9,9 @@ foreach ($name in @('module.json', 'README.md', '规则依据.md', 'scripts', 's
   Copy-Item -LiteralPath (Join-Path $moduleRoot $name) -Destination $stage -Recurse -Force
 }
 $archive = Join-Path $releaseRoot ($manifest.id + '-' + $manifest.version + '.zip')
-Compress-Archive -LiteralPath $stage -DestinationPath $archive -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $true, [System.Text.UTF8Encoding]::new($false))
 $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
 try {
   $entries = @($zip.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName.Replace('\', '/') })
