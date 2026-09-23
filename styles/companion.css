@@ -48,3 +48,7 @@
 .bob-companion :is(button,select,input,summary):focus-visible { outline: 2px solid var(--color-warm-1, #c9593f); outline-offset: 2px; }
 .bob-companion .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 560px) { .bob-companion .bob-field { align-items: stretch; flex-direction: column; gap: .25rem; } .bob-companion .bob-field > select { width: 100%; } .bob-companion .bob-field > input[type=checkbox] { align-self: flex-end; } }
+.bob-assistant-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.bob-assistant-grid article { border: 1px solid var(--color-border-light-primary, #777); border-radius: 5px; padding: 12px; }
+.bob-assistant-grid p { font-size: 13px; margin-bottom: 0; }
+.bob-assistants details { margin: 12px 0; }

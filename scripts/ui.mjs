@@ -58,7 +58,7 @@ function content(cfg) {
   const chapters={0:'跟随官方章节管理器',...Object.fromEntries(CHAPTER_NAMES.map((name,i)=>[i+1,`${i+1} · ${name}`]))};
   return `<nav class="bob-tabs" role="tablist" aria-label="BoB 控制台"><button type="button" role="tab" id="bob-tab-overview" aria-controls="bob-pane-overview" aria-selected="true" data-tab="overview">总览</button><button type="button" role="tab" id="bob-tab-preparation" aria-controls="bob-pane-preparation" aria-selected="false" tabindex="-1" data-tab="preparation">场景准备</button><button type="button" role="tab" id="bob-tab-advanced" aria-controls="bob-pane-advanced" aria-selected="false" tabindex="-1" data-tab="advanced">高级</button></nav>
   <div class="bob-body"><section id="bob-pane-overview" role="tabpanel" aria-labelledby="bob-tab-overview" data-pane="overview">
-    <div data-live="summary"></div><div class="bob-toolbar">${button('sync','立即同步日历')}${button('resume','恢复日历自动')}${button('refresh','刷新状态')}</div><div data-calendar-prepare hidden><p class="hint">关闭手动改天气时重建预报；保留现有预报和每日天气生成。</p>${button('prepare','启用自动同步并保留预报')}</div>
+    <div data-live="summary"></div><div class="bob-toolbar">${button('assistants','冒险助手')}${button('sync','立即同步日历')}${button('resume','恢复日历自动')}${button('refresh','刷新状态')}</div><div data-calendar-prepare hidden><p class="hint">关闭手动改天气时重建预报；保留现有预报和每日天气生成。</p>${button('prepare','启用自动同步并保留预报')}</div>
     <div class="bob-section-title"><h2>所选棋子</h2><span data-live="count"></span></div>
     <div class="bob-toolbar bob-exposure">${button('indoors','设为室内')}${button('outdoors','设为户外')}${button('auto','恢复环境自动')}</div>
     <div data-live="selection"></div><details><summary>本章仍需 GM 判断</summary><ul data-live="notes"></ul></details>
@@ -151,6 +151,7 @@ function panelClass() {
         else if(action==='resume') {await api().resumeCalendar?.();this.message('已请求恢复日历自动同步。');}
         else if(action==='hold') {await api().holdCalendar?.({until:'chapter'});this.message('已请求保留手动天气至下一章。');}
         else if(action==='prepare') {const result=await api().prepareCalendar?.();this.message(result?.error??'已请求启用自动同步并保留预报；请查看同步状态。');}
+        else if(action==='assistants')await api().openAssistants?.();
         else if(action==='refresh')this.message('已刷新显示；未修改时间或规则。');
       } catch(error) {this.message(`${error.message} 未保存的修改仍保留。`,true);}
       finally {this.busy=false;this.updateLive();}
