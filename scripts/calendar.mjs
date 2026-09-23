@@ -1,3 +1,4 @@
+import {t} from './i18n.mjs';
 import {ID, OFFICIAL, AREAS} from './model.mjs';
 import {getEnvironment, DEFAULT_CONFIG} from './runtime.mjs';
 import {calendarPlan} from './weather.mjs';
@@ -8,13 +9,13 @@ const fingerprint = weather => weather ? JSON.stringify([weather.id,weather.temp
   weather.precipitation,weather.setAt,weather.setBy,weather.generated === true,weather.activePeriod]) : null;
 // Native intraday transitions merge period fields but retain the outer generated flag.
 const isGenerated = weather => (weather?.periods?.[weather.activePeriod] ?? weather)?.generated === true;
-const labels = {unavailable:'未连接',disabled:'已停用',paused:'已暂停',waiting:'等待主 GM',held:'手动覆盖中',
-  degraded:'需要配置', 'forecast-conflict':'需要保留预报',error:'同步失败',pending:'等待同步',synced:'同步正常'};
+const labels = () => ({unavailable:t('Calendar.Unavailable'),disabled:t('Calendar.Disabled'),paused:t('Calendar.Paused'),waiting:t('Calendar.Waiting'),held:t('Calendar.Held'),
+  degraded:t('Calendar.Degraded'), 'forecast-conflict':t('Calendar.ForecastConflict'),error:t('Calendar.Error'),pending:t('Calendar.Pending'),synced:t('Calendar.Synced')});
 
 /** The injected seam covers only Calendaria API calls and our two owned settings.
  * A single queue serializes chapter changes, manual controls and native hooks. */
 export function createCalendarController(deps) {
-  let latest = {state:'pending',detail:'等待日历就绪。'};
+  let latest = {state:'pending',detail:t('Calendar.WaitReady')};
   let inFlight, pending = false, forcePending = false, commandPending, writing = 0, published, activeWrite;
 
   function inspect() {
@@ -31,16 +32,16 @@ export function createCalendarController(deps) {
       const {available,options,plan,calendar,api} = inspect();
       let result = {...latest,available,enabled:options.enabled,zoneId:calendar?.weather?.activeZone ?? null,
         weatherId:available && calendar ? api.getCurrentWeather(calendar.weather?.activeZone)?.id ?? null : null};
-      if (!available || !calendar) result = {...result,available:false,state:'unavailable',detail:'Calendaria 未启用、尚未就绪或缺少所需接口。'};
-      else if (!options.enabled) result = {...result,state:'disabled',detail:'自动日历同步已停用。'};
-      else if (!plan.valid) result = {...result,state:'paused',detail:plan.reason ?? '章节或时间不可用。'};
+      if (!available || !calendar) result = {...result,available:false,state:'unavailable',detail:t('Calendar.NoAPI')};
+      else if (!options.enabled) result = {...result,state:'disabled',detail:t('Calendar.SyncDisabled')};
+      else if (!plan.valid) result = {...result,state:'paused',detail:plan.reason ?? t('Calendar.InvalidTime')};
       else if (options.hold && (options.hold.until !== 'chapter' || options.hold.chapter === plan.chapter)) {
-        result = {...result,state:'held',detail:options.hold.reason ?? '保留 GM 手动选择；可恢复自动同步。',
-          overrideUntil:options.hold.until === 'chapter' ? '下次切章' : '手动恢复'};
+        result = {...result,state:'held',detail:options.hold.reasonKey ? t(options.hold.reasonKey) : options.hold.reason ?? t('Calendar.KeepManual'),
+          overrideUntil:options.hold.until === 'chapter' ? t('Calendar.NextChapter') : t('Calendar.ManualResume')};
       }
-      return {...result,label:labels[result.state] ?? result.state};
+      return {...result,label:labels()[result.state] ?? result.state};
     } catch (error) {
-      return {available:false,enabled:false,state:'error',label:labels.error,detail:'无法读取日历状态。',
+      return {available:false,enabled:false,state:'error',label:labels().error,detail:t('Calendar.ReadFailed'),
         zoneId:null,weatherId:null,error:String(error.message ?? error)};
     }
   }
@@ -59,20 +60,20 @@ export function createCalendarController(deps) {
 
   async function run(force, command) {
     let {api,available,options,plan,calendar} = inspect();
-    if (!available || !calendar) return report('unavailable','Calendaria 未启用、尚未就绪或缺少所需接口。');
-    if (!deps.isPrimary()) return report('waiting','由当前主 GM 执行自动同步。');
-    if (!plan.valid) return report('paused',plan.reason ?? '章节或时间不可用。');
-    if (!options.enabled && command?.type !== 'prepare') return report('disabled','自动日历同步已停用。');
+    if (!available || !calendar) return report('unavailable',t('Calendar.NoAPI'));
+    if (!deps.isPrimary()) return report('waiting',t('Calendar.PrimaryOnly'));
+    if (!plan.valid) return report('paused',plan.reason ?? t('Calendar.InvalidTime'));
+    if (!options.enabled && command?.type !== 'prepare') return report('disabled',t('Calendar.SyncDisabled'));
 
     // Validate all installed zones before changing anything. Never rebuild calendars.
     const zones = api.getCalendarZones();
     const missing = AREAS.map(area => `bob-${area}`).filter(id => !zones?.some(zone => zone.id === id));
-    if (missing.length) return report('degraded',`缺少既有章节日历区域：${missing.join('、')}。请恢复既有 BoB 日历配置后重试。`);
+    if (missing.length) return report('degraded',t('Calendar.MissingZones',{zones:missing.join(', ')}));
     const presets = await api.getWeatherPresets();
     if (!Array.isArray(presets) || !presets.some(preset => preset.id === plan.weather?.id)) {
-      return report('degraded',`缺少既有天气预设 ${plan.weather?.id ?? ''}；请恢复既有 BoB 天气配置后重试。`);
+      return report('degraded',t('Calendar.MissingPreset',{preset:plan.weather?.id ?? ''}));
     }
-    if (!deps.isPrimary()) return report('waiting','主 GM 已变化，等待新主 GM 同步。');
+    if (!deps.isPrimary()) return report('waiting',t('Calendar.PrimaryChanged'));
     if (commandPending || forcePending) return status();
     // A newer chapter/configuration arriving during the async preflight wins.
     const fresh = inspect();
@@ -82,7 +83,7 @@ export function createCalendarController(deps) {
       return status();
     }
     options = fresh.options;
-    if (!options.enabled && command?.type !== 'prepare') return report('disabled','自动日历同步已停用。');
+    if (!options.enabled && command?.type !== 'prepare') return report('disabled',t('Calendar.SyncDisabled'));
 
     if (command?.type === 'prepare') {
       // Deliberate GM action only: preserves forecast data, changes its override policy.
@@ -90,9 +91,9 @@ export function createCalendarController(deps) {
       options = {...options,enabled:true,hold:null};
       await saveOptions(options);force = true;
     } else if (command?.type === 'hold') {
-      options = {...options,hold:{until:command.until,chapter:plan.chapter,reason:'已暂停接管，保留 GM 手动天气与区域选择。'}};
+      options = {...options,hold:{until:command.until,chapter:plan.chapter,reasonKey:'Calendar.HoldReason'}};
       await saveOptions(options);
-      return report('held','已暂停接管，保留 GM 手动选择。');
+      return report('held',t('Calendar.HoldStatus'));
     } else if (command?.type === 'resume') force = true;
 
     const previous = deps.getState() ?? {};
@@ -103,7 +104,7 @@ export function createCalendarController(deps) {
     if ((force || holdExpired) && options.hold) {
       options = {...options,hold:null};await saveOptions(options);
     }
-    if (options.hold) return report('held','保留 GM 手动选择；到期或恢复自动后继续同步。');
+    if (options.hold) return report('held',t('Calendar.HoldUntil'));
 
     calendar = api.getActiveCalendar();
     const activeZone = calendar.weather?.activeZone;
@@ -113,8 +114,8 @@ export function createCalendarController(deps) {
     const manualZone = sameCalendar && previous.zoneId && activeZone !== previous.zoneId;
     if (!force && !chapterChanged && !holdExpired && (manualWeather || manualZone)) {
       await saveOptions({...options,hold:{until:'chapter',chapter:plan.chapter,
-        reason:'检测到手动天气或区域选择；保留至下次切章，也可立即恢复自动。'}});
-      return report('held','保留 GM 手动选择。');
+        reasonKey:'Calendar.ManualDetected'}});
+      return report('held',t('Calendar.ManualStatus'));
     }
 
     const range = plan.temperatureRange;
@@ -123,7 +124,7 @@ export function createCalendarController(deps) {
         : current.temperature !== plan.weather.temperature));
     const changeWeather = !current || (plan.weatherRequired && current.id !== plan.weather.id) || wrongTemperature;
     if (changeWeather && deps.clearsForecast()) return report('forecast-conflict',
-      'Calendaria 当前会在手动改天气时重建预报。请使用“启用自动同步并保留预报”，保留现有预报后再同步。');
+      t('Calendar.ForecastHelp'));
 
     let applied = previous.weather ?? null;
     const stillCurrent = () => {
@@ -136,8 +137,8 @@ export function createCalendarController(deps) {
     };
     const holdExternal = async () => {
       await saveOptions({...deps.getOptions(),hold:{until:'chapter',chapter:plan.chapter,
-        reason:'同步期间检测到手动天气修改；保留至下次切章，也可恢复自动。'}});
-      return report('held','保留同步期间的 GM 手动修改。');
+        reasonKey:'Calendar.ManualDuringSync'}});
+      return report('held',t('Calendar.KeepConcurrent'));
     };
     activeWrite = {zoneId:plan.zoneId,expected:null,manual:false};
     writing++;
@@ -150,7 +151,7 @@ export function createCalendarController(deps) {
         if (activeWrite.manual || (fingerprint(freshWeather) !== fingerprint(current) && !isGenerated(freshWeather))) {
           return await holdExternal();
         }
-        if (api.getActiveCalendar()?.weather?.activeZone !== plan.zoneId) throw new Error('日历未接受章节区域切换。');
+        if (api.getActiveCalendar()?.weather?.activeZone !== plan.zoneId) throw new Error(t('Calendar.ZoneRejected'));
       }
       if (changeWeather) {
         if (!stillCurrent()) return status();
@@ -164,7 +165,7 @@ export function createCalendarController(deps) {
         if (activeWrite.manual || (written && fingerprint(written) !== fingerprint(after) && !isGenerated(after))) {
           return await holdExternal();
         }
-        if (after?.id !== id || after?.temperature !== temperature) throw new Error('日历未接受天气更新。');
+        if (after?.id !== id || after?.temperature !== temperature) throw new Error(t('Calendar.WeatherRejected'));
         applied = fingerprint(after);
       }
     } finally { writing--;activeWrite = undefined; }
@@ -172,7 +173,7 @@ export function createCalendarController(deps) {
       ? fingerprint(api.getCurrentWeather(plan.zoneId)) : sameCalendar && previous.zoneId === plan.zoneId ? applied : null;
     const next = {calendarId,chapter:plan.chapter,zoneId:plan.zoneId,key:plan.key,weather:accepted};
     if (!equal(previous,next) && deps.isPrimary()) await deps.saveState(next);
-    return report('synced',`第 ${plan.chapter} 章 · ${plan.window}；每日天气由 Calendaria 生成。`);
+    return report('synced',t('Calendar.Status',{chapter:plan.chapter,weather:plan.window}));
   }
 
   function enqueue({force = false,command} = {}) {
@@ -185,7 +186,7 @@ export function createCalendarController(deps) {
         pending = false;
         const forced = forcePending, action = commandPending;forcePending = false;commandPending = undefined;
         try { await deps.whenWeatherSettled?.();await run(forced,action); }
-        catch (error) { report('error','日历同步失败；保留当前数据，可重试。',error); }
+        catch (error) { report('error',t('Calendar.Failed'),error); }
       }
       return status();
     }).finally(() => {inFlight = undefined;});
@@ -214,7 +215,7 @@ const primaryGM = () => Boolean(globalThis.game?.user?.isGM &&
 
 function currentPlan() {
   const config = {...DEFAULT_CONFIG,...readSetting('config',{})};
-  if (!config.enabled) return {valid:false,reason:'伴随模组已停用，日历自动同步暂停。'};
+  if (!config.enabled) return {valid:false,reason:t('Calendar.ModuleDisabled')};
   return calendarPlan({environment:getEnvironment(),config});
 }
 
@@ -241,9 +242,9 @@ export const prepareCalendar = () => getController().prepare();
 export function registerCalendar() {
   if (registered) return;
   registered = true;
-  game.settings.register(ID,'calendar',{name:'BoB 日历同步',scope:'world',config:false,type:Object,
+  game.settings.register(ID,'calendar',{name:t('Calendar.Settings'),scope:'world',config:false,type:Object,
     default:{enabled:true,hold:null}});
-  game.settings.register(ID,'calendarState',{name:'BoB 日历同步记录',scope:'world',config:false,type:Object,default:{}});
+  game.settings.register(ID,'calendarState',{name:t('Calendar.Records'),scope:'world',config:false,type:Object,default:{}});
   const module = game.modules.get(ID);
   if (module) module.api = {...module.api,calendarStatus:getCalendarStatus,getCalendarStatus,syncCalendar,resumeCalendar,holdCalendar,prepareCalendar};
   const sync = () => {lastClockKey = currentPlan().key;void syncCalendar();};

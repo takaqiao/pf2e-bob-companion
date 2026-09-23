@@ -60,6 +60,20 @@ test('secondary GMs and players cannot write even via force or resume', async()=
   assert.deepEqual(f.writes,[]);
 });
 
+test('saved manual weather reasons follow the viewing client language without another write',async()=>{
+  const prior=globalThis.game;
+  let language='cn';
+  globalThis.game={i18n:{format:key=>`${language}:${key}`}};
+  try {
+    const f=fixture();await f.controller.hold();f.clear();
+    language='en';f.reconnect();
+    assert.equal(f.controller.status().detail,'en:BOB.Calendar.HoldReason');
+    assert.deepEqual(f.writes,[]);
+    f.options.hold={until:'manual',reason:'GM custom reason'};
+    assert.equal(f.controller.status().detail,'GM custom reason');
+  } finally {globalThis.game=prior;}
+});
+
 test('daily generated weather remains variable and unchanged after reconnect', async()=>{
   const f=fixture();const before=clone(f.weather);
   await f.controller.sync();f.clear();

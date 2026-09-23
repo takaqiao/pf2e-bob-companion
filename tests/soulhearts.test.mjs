@@ -51,6 +51,56 @@ function fixture() {
 }
 
 test('soulhearts feature exports are implemented',()=>assert.equal(typeof soulheartGrade,'function'));
+test('the operation form offers only holders with recognized, usable soulhearts',()=>{
+  const valid={id:'valid',items:new Map([['one',{...item(),system:{slug:'soulheart',quantity:1}}]])};
+  const exhausted={id:'exhausted',items:new Map([['empty',{...item(),system:{slug:'soulheart',quantity:0}}]])};
+  const other={id:'other',items:new Map([['sword',{...item(),system:{slug:'sword',quantity:3}}]])};
+  assert.deepEqual(native.soulheartEligibleHolders([valid,exhausted,other]).map(actor=>actor.id),['valid']);
+  assert.deepEqual(native.soulheartEligibleItems(valid).map(row=>row.id),['heart']);
+  assert.deepEqual(native.soulheartEligibleHolders([exhausted,other]),[]);
+});
+test('confirmation uses the displayed proposal only while selections match',()=>{
+  const shown={id:'shown',quantityAfter:1};
+  assert.equal(native.displayedProposal(shown,'holder:heart:phantom:pc1','holder:heart:phantom:pc1'),shown);
+  assert.throws(()=>native.displayedProposal(shown,'holder:heart:phantom:pc1','holder:heart:phantom:pc2'),/ErrorSelectionChanged/);
+  assert.throws(()=>native.displayedProposal(null,'same','same'),/ErrorSelectionChanged/);
+});
+test('mixed existing and new beneficiaries each see their actual HP catch-up in the same preview',()=>{
+  const previous=globalThis.game;
+  globalThis.game={i18n:{format:(key,values)=>key==='BOB.Soulheart.BeneficiaryPreview'?`${values.actor}: HP bonus ${values.before} → ${values.after}`:key}};
+  try {
+    const op=planUpgrade({...context(),beneficiaries:[{id:'existing',effect:{id:'old',value:20}},{id:'new',effect:null}],state:{total:20}});
+    const html=native.beneficiaryPreviewHTML(op,id=>({existing:'Existing PC',new:'New PC'}[id]));
+    assert.match(html,/Existing PC: HP bonus 20 → 21/);
+    assert.match(html,/New PC: HP bonus 0 → 21/);
+    assert.equal((html.match(/<li>/g)??[]).length,2);
+  } finally {globalThis.game=previous;}
+});
+test('baseline sync discloses catch-up for each selected character even when the ledger stays unchanged',()=>{
+  const previous=globalThis.game;
+  globalThis.game={i18n:{format:(key,values)=>key==='BOB.Soulheart.BeneficiaryPreview'?`${values.actor}: HP bonus ${values.before} → ${values.after}`:key}};
+  try {
+    const op=model.planHPSync({id:'sync-preview',beneficiaries:[{id:'existing',effect:{id:'old',value:20}},{id:'new',effect:null}],state:{total:20},time:100});
+    const html=native.beneficiaryPreviewHTML(op,id=>id);
+    assert.equal(op.totalBefore,op.totalAfter);
+    assert.match(html,/existing: HP bonus 20 → 20/);
+    assert.match(html,/new: HP bonus 0 → 20/);
+  } finally {globalThis.game=previous;}
+});
+test('a completed expired life retry displays its no-grant notice instead of a granted HP record',()=>{
+  const previous=globalThis.game;
+  globalThis.game={actors:new Map([['holder',{name:'Holder'}]]),i18n:{format:(key,values)=>{
+    if(key==='BOB.Soulheart.RecordLifeAttempt')return `${values.actor}: Bolster Life attempt`;
+    if(key==='BOB.Soulheart.NoticeExpired')return 'Expired; no temporary HP was granted.';
+    return key;
+  }}};
+  try {
+    const html=native.soulheartRecordHTML({kind:'life',holderId:'holder',temporaryHP:6,createdAt:100,notice:'Soulheart.NoticeExpired'});
+    assert.match(html,/Holder: Bolster Life attempt/);
+    assert.match(html,/Expired; no temporary HP was granted/);
+    assert.doesNotMatch(html,/Holder: 6 temporary HP/);
+  } finally {globalThis.game=previous;}
+});
 test('only exact source, exact slug, or explicit GM binding identifies an actual equipment item',()=>{
   assert.equal(soulheartGrade(item()),'ordinary');
   assert.equal(soulheartGrade({...item(),system:{slug:'not-a-soulheart'},name:'Greater Soulheart'}),null);
@@ -64,9 +114,9 @@ test('all three grades require the exact rank and award literal 1/2/3 HP',()=>{
     assert.equal(op.rankAfter,rank+1);assert.equal(op.totalAfter,total);assert.equal(op.quantityAfter,1);
   }
   assert.equal(phantomRank(phantom(0)).rank,0);
-  assert.throws(()=>planUpgrade(context('greater',0)),/阶/);
-  assert.throws(()=>planUpgrade({...context(),item:item('ordinary',0)}),/数量/);
-  assert.throws(()=>planUpgrade({...context(),beneficiaries:[]}),/角色/);
+  assert.throws(()=>planUpgrade(context('greater',0)),/ErrorRequiredRank/);
+  assert.throws(()=>planUpgrade({...context(),item:item('ordinary',0)}),/ErrorQuantity/);
+  assert.throws(()=>planUpgrade({...context(),beneficiaries:[]}),/ErrorBeneficiaries/);
 });
 test('adopts existing manual HP as visible baseline and never caps complete award at 21',()=>{
   const op=planUpgrade({...context('major',2),beneficiaries:[{id:'pc1',effect:{id:'manual',value:21}},{id:'pc2',effect:{id:'other',value:20}}]});
@@ -87,7 +137,7 @@ test('persisted operation survives failed rank mutation and retry never consumes
 });
 test('another pending operation cannot interleave with a partial upgrade',async()=>{
   const {db,port}=fixture();db.fail='rank';await assert.rejects(runUpgrade(port,planUpgrade(context()),true));
-  await assert.rejects(runUpgrade(port,planUpgrade({...context(),id:'op2'}),true),/待完成/);
+  await assert.rejects(runUpgrade(port,planUpgrade({...context(),id:'op2'}),true),/ErrorPending/);
 });
 test('correction restores only the latest exact operation and survives partial correction',async()=>{
   const {db,port}=fixture(),op=planUpgrade(context());await runUpgrade(port,op,true);db.fail='undo:rank';
@@ -98,7 +148,7 @@ test('correction restores only the latest exact operation and survives partial c
 test('correction refuses subsequent document changes or a later completed award',async()=>{
   const {db,port}=fixture(),op=planUpgrade(context());await runUpgrade(port,op,true);db.itemQuantity=8;
   await assert.rejects(correctUpgrade(port,'op1'),/changed/);assert.equal(db.itemQuantity,8);
-  db.itemQuantity=1;db.state.lastCompleted='later';await assert.rejects(correctUpgrade(port,'op1'),/后续/);
+  db.itemQuantity=1;db.state.lastCompleted='later';await assert.rejects(correctUpgrade(port,'op1'),/ErrorLaterAward/);
 });
 test('Bolster Life uses grade and day/night values with an 8-hour effect and does not consume',()=>{
   for(const [grade,day,night] of [['ordinary',6,3],['greater',12,6],['major',18,9]]) {
@@ -109,7 +159,7 @@ test('Bolster Life uses grade and day/night values with an 8-hour effect and doe
 });
 test('daily item cooldown persists through backward time and resets only at its saved next midnight',()=>{
   const ctx={id:'life',holderId:'holder',item:item(),phase:'day',time:200,seconds:200,lastUse:{id:'old',usedAt:100,resetAt:86400}};
-  assert.throws(()=>planLife(ctx),/每日/);assert.throws(()=>planLife({...ctx,time:0}),/每日/);
+  assert.throws(()=>planLife(ctx),/ErrorDailyUsed/);assert.throws(()=>planLife({...ctx,time:0}),/ErrorDailyUsed/);
   assert.equal(planLife({...ctx,time:86400,seconds:0}).temporaryHP,6);
 });
 test('native mutation uses one official unlimited badge per PC and reuses an adopted effect',async()=>{
@@ -118,6 +168,7 @@ test('native mutation uses one official unlimited badge per PC and reuses an ado
     const actor=f.actors.get(id);assert.equal(actor.items.size,1);
     const effect=actor.items.get('existing');assert.equal(effect.system.badge.value,22);assert.equal(effect.system.badge.max,null);
     assert.doesNotMatch(effect.system.description.value,/Future|spoilers/);assert.equal(effect.system.description.gm,'');
+    assert.deepEqual(effect.flags[ID].localization,{name:'Soulheart.HPEffectName',description:'Soulheart.HPEffectDescription',values:{value:22}});
   }
   assert.equal(f.actors.get('holder').items.get('heart').system.quantity,1);
   assert.equal(phantomRank(f.actors.get('phantom')).rank,1);
@@ -131,7 +182,7 @@ test('native retry recognizes a successful item write whose acknowledgement was 
 test('native correction protects subsequent item changes and never deletes an adopted reward',async()=>{
   const f=nativeFixture({manual:3}),op=f.plan();await runUpgrade(f.port,op,true);
   const heart=f.actors.get('holder').items.get('heart');heart.system.quantity=5;
-  await assert.rejects(correctUpgrade(f.port,op.id),/改变/);heart.system.quantity=1;
+  await assert.rejects(correctUpgrade(f.port,op.id),/ErrorStale/);heart.system.quantity=1;
   await correctUpgrade(f.port,op.id);
   assert.equal(f.actors.get('pc1').items.get('existing').system.badge.value,3);assert.equal(heart.system.quantity,2);
 });
@@ -141,17 +192,18 @@ test('missing native HP template fails before consuming the actual item',async()
 });
 test('stale preview refuses changes to quantity, rank or ledger before any side effects',async()=>{
   const f=nativeFixture(),op=f.plan();f.actors.get('holder').items.get('heart').system.quantity=9;
-  await assert.rejects(runUpgrade(f.port,op,true),/改变/);assert.deepEqual(f.state(),{});
+  await assert.rejects(runUpgrade(f.port,op,true),/ErrorStale/);assert.deepEqual(f.state(),{});
 });
 test('duplicate existing HP effects are rejected for GM reconciliation',()=>{
   const f=nativeFixture({manual:2}),actor=f.actors.get('pc1');actor.items.set('duplicate',{...actor.items.get('existing'),id:'duplicate'});
-  assert.throws(()=>native.findHPEffect(actor),/多个/);
+  assert.throws(()=>native.findHPEffect(actor),/ErrorMultipleHPEffects/);
 });
 test('native temporary HP effect retains TempHP machinery but removes choices and hidden description',()=>{
   const template={type:'effect',system:{rules:[{key:'ChoiceSet',prompt:'Future reward'},{key:'TempHP',value:'@item.flags.example'}],description:{value:'Future spoiler'}}};
   const result=native.lifeEffectData(template,{id:'life',holderId:'pc1',temporaryHP:12,createdAt:100,expiresAt:28900});
   assert.deepEqual(result.system.rules,[{key:'TempHP',value:12}]);assert.equal(result.system.duration.unit,'hours');assert.equal(result.system.duration.value,8);assert.equal(result.system.start.value,100);
   assert.doesNotMatch(result.system.description.value,/Future/);
+  assert.deepEqual(result.flags[ID].localization,{name:'Soulheart.LifeEffectName',description:'Soulheart.LifeEffectDescription',values:{value:12}});
 });
 test('daily activation retries a lost effect acknowledgement without a second effect or item consumption',async()=>{
   const f=nativeFixture(),heart=f.actors.get('holder').items.get('heart');
@@ -177,11 +229,11 @@ test('new PCs can adopt the complete party HP ledger without consuming an item o
   await correctUpgrade(f.port,op.id);assert.equal(f.actors.get('pc1').items.size,0);assert.equal(f.state().total,24);
 });
 test('GM manual baseline cannot reduce a previously earned reward',()=>{
-  assert.throws(()=>model.planHPSync({id:'sync',beneficiaries:[{id:'pc1',effect:{id:'old',value:9}}],baseline:3,state:{total:7},time:100}),/降低/);
+  assert.throws(()=>model.planHPSync({id:'sync',beneficiaries:[{id:'pc1',effect:{id:'old',value:9}}],baseline:3,state:{total:7},time:100}),/ErrorBaselineDecrease/);
 });
 test('ordinary players cannot open the GM soulheart choices',async()=>{
   const oldGame=globalThis.game;globalThis.game={user:{isGM:false}};
-  try {await assert.rejects(native.openSoulhearts(),/GM/);}finally{globalThis.game=oldGame;}
+  try {await assert.rejects(native.openSoulhearts(),/ErrorGMOnly/);}finally{globalThis.game=oldGame;}
 });
 test('canonical source wins over an inconsistent slug and narrative soulhearts cannot be bound for consumption',()=>{
   assert.equal(soulheartGrade({...item(),_stats:{compendiumSource:'Compendium.pf2e.equipment-srd.Item.05h3LWflr74iJiVg'}}),'major');
@@ -224,7 +276,7 @@ test('uncommitted Bolster Life preview crossing day/night is rejected before dai
   const f=nativeFixture({environment:()=>({valid:true,night,seconds:100})}),heart=f.actors.get('holder').items.get('heart');
   const op=planLife({id:'boundary',holderId:'holder',item:heart,phase:'day',time:100,seconds:100});
   night=true;
-  await assert.rejects(runLife(f.port,op,true),/昼夜|预览/);
+  await assert.rejects(runLife(f.port,op,true),/ErrorLifeStale/);
   assert.deepEqual(f.state(),{});assert.equal(heart.flags?.[ID]?.soulheartDaily,undefined);
   assert.equal(f.actors.get('holder').items.size,1);
 });
@@ -234,7 +286,7 @@ test('uncommitted Bolster Life preview crossing midnight is rejected even when t
   const f=nativeFixture({clock:()=>time,environment:()=>({valid:true,night:true,seconds:time%86400})}),heart=f.actors.get('holder').items.get('heart');
   const op=planLife({id:'midnight',holderId:'holder',item:heart,phase:'night',time,seconds:86399});
   time=86400;
-  await assert.rejects(runLife(f.port,op,true),/日期|预览/);
+  await assert.rejects(runLife(f.port,op,true),/ErrorLifeStale/);
   assert.deepEqual(f.state(),{});assert.equal(heart.flags?.[ID]?.soulheartDaily,undefined);
 });
 

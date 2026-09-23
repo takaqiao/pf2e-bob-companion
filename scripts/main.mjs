@@ -7,7 +7,9 @@ import { registerNightmares } from './nightmares.mjs';
 import { registerBoons } from './boons.mjs';
 import { registerSoulhearts } from './soulhearts.mjs';
 import { registerHazards } from './hazards.mjs';
+import { registerI18n } from './i18n.mjs';
 Hooks.once('init', () => {
+  registerI18n();
   registerRuntime(); registerCalendar(); registerAssistantCore();
   registerNightmares(); registerBoons(); registerSoulhearts(); registerHazards();
   registerAssistants(); registerUI();

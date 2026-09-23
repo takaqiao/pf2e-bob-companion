@@ -1,145 +1,60 @@
-# BoB｜昼夜、章节风暴与冒险助手 0.3.0
+# Bastion of Blasphemies Companion
 
-适用于 Foundry VTT **14.368**、PF2e **8.5.1** 与《亵渎堡垒》官方模组 **1.0.0**。需要启用 **libWrapper 1.13.5.1+**。这是独立伴随模组，不包含商业冒险内容。
+[简体中文](README.zh-CN.md)
 
-## 0.3.0 冒险助手
+GM tools for running *Bastion of Blasphemies* in PF2e.
 
-四类助手集中在独立的 **「冒险助手」** 入口，日常环境面板仍保留原来的三个页面。请由当前主 GM 执行结算；其他 GM 不会并发修改同一记录。已有世界无需迁移研究资料：继续使用原来的研究场景，以半自动方式确认研究主题、来源额度和结果，本模组不建立第二套研究系统。
+- Apply chapter-based day, night and weather modifiers.
+- Confirm Party rests and resolve nightmare saves.
+- Track boons, cooldowns, foul air and tower lightning.
+- Use soulhearts with a single selection and preview form.
+- Sync chapter weather with an existing Calendaria setup.
 
-| 助手 | 操作与边界 |
-|---|---|
-| 休息与噩梦 | 原生 Party 休息完成后汇总待办，GM 确认实际睡眠名单和已解锁章节，再请求检定、记录结果和当前效果。首次使用须初始化已有战役的首夜记录；不会重复恢复资源或推进世界时间。 |
-| 恩惠与冷却 | GM 明确登记当前地点的使用，追踪个人或共享冷却、当前恩惠、单次消费与转授。疾病、净化和剧情前提由 GM 确认；房间内加值需先绑定对应原生 Region。 |
-| 环境危险 | GM 将原生 Region 标为地牢、污秽空气或高塔户外，再追踪当前暴露、离开免疫计时和雷击待办。是否实际暴露、目标、豁免与伤害仍由 GM 确认，不自动扣 HP。 |
-| 魂心 | 选择实际持有者、实际物品、合格魅影和受益队伍，核对预览后扣一枚、调用原生阶位开关并更新每名 PC 的唯一累计 HP 效果。另有每日临时 HP、已有奖励基线、新角色补齐、失败重试和最近奖励纠正。 |
+## Requirements
 
-魂心只按已知来源或准确 slug 识别；自定义物品须在助手中明确绑定后再次预览。普通、高等、上等对应 0→1、1→2、2→3 阶，分别增加每名 PC 的累计最大 HP 1、2、3 点。临时 HP 每件物品每日一次，按当前昼夜计算并持续最多 8 小时，不扣物品。纯净与天使魂心保留剧情使用。累计 HP 以助手记录和原生效果为准；官方旧战役字段上限 21，本实现不向该字段写入被截断的数值。
+Tested with Foundry VTT **14.368**, PF2e **8.5.1** and libWrapper **1.13.5.1+**. The official adventure **1.0.0** supplies the items and rules used by the adventure tools. Those tools require its imported world content. Environment rules can also use a manually selected chapter.
 
-未完成事务应使用「继续待办」恢复，不重新登记一次奖励。纠正会核对实际文档及后续操作；状态已改变时停下供 GM 核对。原生资产缺失时会显示原因，须恢复相应官方效果或魅影开关后重试。
+Calendaria **1.4.2** is optional. Sync requires the existing BoB calendar zones and weather presets; the module does not create a calendar.
 
-### 助手入口与快捷宏
+## Install
 
-GM 可从设置中的 **「BoB 冒险助手」**，或环境面板的 **「冒险助手」** 按钮进入。在助手的「快捷入口」中选择「安装／更新快捷宏」，会创建两个 GM 宏并保留现有快捷栏位置；将宏从目录拖到空闲快捷栏即可。
+In Foundry's module installer, paste this manifest URL:
 
-安装包提供 `macros/adventure-assistants.js` 和 `macros/use-soulheart.js`，分别调用：
-
-```js
-await game.modules.get('pf2e-bob-companion').api.openAssistants();
+```text
+https://github.com/takaqiao/pf2e-bob-companion/releases/latest/download/module.json
 ```
 
-```js
-await game.modules.get('pf2e-bob-companion').api.openSoulhearts();
-```
+Enable the module and libWrapper, then reload. Open **BoB adventure tools** in Module Settings, or use **Adventure tools** from the environment panel in the Actors directory.
 
-**「使用魂心」宏只是打开模组界面。** 规则、选择、预览与结算均由模块执行，单击宏不会立即消耗物品。已有同步章节宏继续使用原来的接口。
+## First use
 
-首次配置时，先初始化休息助手；旧战役应按实际进度标记首夜是否已处理。然后核对当前队伍、接纳既有 HP 奖励，并为危险范围与房间恩惠绑定原生 Region。助手不根据地图坐标猜测区域，也不自动发现地点或授予未确认的奖励。
+1. In the environment panel, check the chapter and clock. Under **Scene setup**, include your map and mark indoor or sheltered Regions. The official main island is included by default.
+2. Under **Rest → Advanced**, set whether the campaign's previous first nights have already been handled. Party rests then appear for confirmation.
+3. Bind hazard Regions and the boon room before using their automatic tracking.
+4. For an existing campaign, check the soulheart HP total under **Soulhearts → Advanced**. New characters can receive the party's existing reward there.
 
-### 玩家可见范围
+Soulheart actions show the actual item, phantom rank and each recipient's HP change before applying them. Recovery and corrections are under Advanced. Use a pending operation's retry action after a failed write.
 
-助手面板与待办仅供 GM，规则提示默认发送 GM 密语。普通玩家只接收当前相关的检定和角色已经获得的效果；不会在玩家面板或效果说明中列出尚未揭示的地点、未来奖励或掉落目录。防剧透范围是普通玩家肉眼可见的界面、聊天、弹窗与效果，脚本/API 资源访问权限仍遵循 Foundry 和所装模块的权限模型。
+The GM confirms story prerequisites, actual exposure, counteract checks and damage. Players see their current rolls and effects. Research continues in the existing adventure scene.
 
-## 0.2.0 日历与面板整合
+## Languages
 
-- 面板分为「总览」「场景准备」「高级」。总览显示当前章节、世界时间、同步状态与所选棋子的实际修正；可批量设置室内、户外或恢复自动判断。
-- 状态随章节、时间和选择变化更新，切换页签、打开子设置不会丢失未保存的高级设置。普通状态更新不重绘表单，也不重算角色。
-- 可选 Calendaria 适配器复用已配置的 BoB 日照与天气区，在章节、散雾、雨歇、短暂飞雪等边界同步。第六章规则和日历使用同一停雨时段。
-- 手动天气覆盖会保留并显示，可用「恢复自动」继续章节同步。原同步宏改用同一模块接口，参见下文。
+English and Simplified Chinese follow each client's Foundry language. Chinese supports both `cn` and `zh-cn`. Module-created effect names, descriptions and marked chat messages render in each viewer's language. User-created names and other packages' content keep their own translations. Existing chat history keeps its saved text.
 
-### 保留 0.1.1 的移动性能修复
+## Settings and performance
 
-移动棋子时只检查相关角色的环境规则；规则未变时不再重新准备角色或重绘角色界面，避免每次普通移动刷新全部受管角色。跨区域造成规则变化时仅刷新相关角色，其他模组的无关 flags 也不会触发全局复算。
+The environment panel has Overview, Scene setup and Advanced tabs. Ordinary movement within the same environment does not reprepare actors. Normal clock ticks do not save hazard records unless a boundary changes. No frame loop or polling is added.
 
-昼夜边界、章节、配置及场景身份变化仍会复算；禁用规则或退出适用范围时保留原有清理。禁用后的普通移动不再触发本模组刷新。本次修复减少的是移动引起的角色刷新开销，不改变世界时间或视觉天气。
+Pausing environment rules also pauses automatic rest intake, hazard tracking and conditional boon updates. It keeps completed rewards and records. Saved items and effects remain when the module is disabled; remove them when their in-game conditions end.
 
-## 安装与首次使用
+Calendaria sync preserves manual weather until the next chapter or until the GM resumes sync. It uses the existing world clock and leaves scene visuals and sound to the adventure.
 
-1. 在 Foundry 设置界面选择「附加模组 → 安装模组」，将以下 [manifest 地址](https://github.com/takaqiao/pf2e-bob-companion/releases/latest/download/module.json)填入「Manifest URL」后安装：
+## Development
 
-   ```text
-   https://github.com/takaqiao/pf2e-bob-companion/releases/latest/download/module.json
-   ```
+Run tests with `node --test tests/*.test.mjs`. Build a release in PowerShell with `./build.ps1`. The archive contains the runtime, languages, documentation and three optional macro scripts. Tests and adventure assets are excluded.
 
-   也可从 [GitHub Releases](https://github.com/takaqiao/pf2e-bob-companion/releases/latest) 下载 ZIP，将其中的 `pf2e-bob-companion` 文件夹解压至 Foundry 数据目录的 `Data/modules/`；检查 `Data/modules/pf2e-bob-companion/module.json` 存在。
-2. 在 BoB 世界的「管理模组」启用本模组及 libWrapper，重载。推荐同时启用官方 BoB；没有官方模组时须手动指定章节。
-3. GM 从「设置 → 模组设置 → BoB规则与判定」打开面板，或点角色目录里的 **BoB 昼夜与风暴** 按钮。可创建脚本宏：
+[Changes](CHANGELOG.md) · [Issues](https://github.com/takaqiao/pf2e-bob-companion/issues)
 
-```js
-game.modules.get("pf2e-bob-companion").api.open();
-```
+## License
 
-4. 在「总览」确认章节和时间。默认跟随官方战役管理器当前解锁章节，不随玩家返回旧区域倒退。默认仅官方主岛场景受管；复制地图／自建地图在「场景准备」纳入。
-5. **先确认室内外**：主岛是混合场景，天气暴露初始为「待GM判断」。选择棋子后设置「户外」「室内」「仅避风」「仅避雨」。也可将场景默认设为户外，再用「区域设置」标记室内与遮蔽区域，移动棋子后自动切换。棋子覆盖优先；重叠区域冲突会暂停天气。
-6. 普通察觉往往没有 `visual` 特征。第4–8章默认仅匹配带该特征的检定；需要按视觉观察时，在「高级」的棋子／角色设置中选「当前以视觉察觉」，改用听觉等时改回。第9章按章节正文作用于所有察觉。
-
-## 可选 Calendaria 同步
-
-核对版本为 **Calendaria 1.4.2**。不安装日历时，昼夜与天气规则照常工作。同步需要既有的 BoB 章节区 `bob-shore`、`bob-grounds`、`bob-cellars`、`bob-reception`、`bob-dungeon`、`bob-private`、`bob-temple`、`bob-vault`、`bob-towers` 及对应天气预设；缺少配置时面板显示原因，不会重建历法或删除原有区域。
-
-在「总览」查看同步状态。若 Calendaria 仍启用“GM 改天气时重建预报”，选择 **「启用自动同步并保留预报」**：这个明确操作只关闭 `calendaria.gmOverrideClearsForecast` 并启用同步，保留已有预报和每日天气生成。模块不会在启动时静默更改该选项。
-
-同步只由主 GM 执行（优先沿用 ATLAS 的指定主 GM）。普通走时不写入天气，重连和大幅跳时只核对当前状态，不补播中间时段。天气写入走原生日历接口；只有实际变化才产生必要记录。不会推进世界时间、改走时倍率、暂停/战斗策略、月相、中文历法、节日、HUD 布局或场景 FX/声音设置；主岛既有音画仍由冒险负责。
-
-每日生成仍可保留允许范围内的温度、风与第一章晴/少云变化；第四章散雾、第六章雨歇和第八章午夜前半小时飞雪会按章及时校准。数值温度、风速与精确雨歇/飞雪窗口是 GM 校准值，不是额外的原著规则。未知手动天气优先保留到下一章节，面板显示暂停原因和「恢复自动」。风暴终止或无法映射的强制停雨会暂停日历天气接管，后续天气由 GM 按剧情指定。
-
-已有同步宏可保留原来的宏和快捷栏位置，只把脚本替换为安装包的 `macros/sync-chapter.js`，或使用：
-
-```js
-await game.modules.get("pf2e-bob-companion").api.syncCalendar({force: true});
-```
-
-手动同步不会推进时间。模块不在每次启动创建宏或重新分配快捷栏。首次遇到保留的旧天气时，可在面板「恢复自动」；需要主动暂停时可调用 `api.holdCalendar({until: "chapter"})`。
-
-## 自动处理：昼夜与天气
-
-- 夜间敌人所有先攻 **+1环境**、对抗 `holy` 效果的所有豁免 **+1环境**；PC 对抗 `fear` 效果的所有豁免 **−1环境**。室内同样适用夜幕；白天的暗房不会变成夜间。
-- 读取 PF2e 世界钟，用章节日出／日落边界自动进出夜幕，始终24小时制。与 Calendaria 共用已有世界时间，不改走时速率、月相、光照、天气特效或声音。
-- 已确认暴露环境后，应用下表风暴修正。第四章 **22:00–02:00散雾**；第六章默认每天 **13:00–14:30停雨**，面板可改为同日1～2小时或手动覆盖。第六章的具体停雨时刻为模组默认设置，不是原著指定时间。
-- 使用原生 PF2e FlatModifier／Note 和条件谓词，按环境加减值原生规则叠加；强环境加值取最大、强环境减值取最差，环境加值与减值可同时存在。
-- 自动复算发生于时段边界、章节、阵营、场景／区域／棋子变化。昼夜与天气修正不写入角色效果；助手在明确结算时使用原生效果与物品记录。
-
-| 章 | 日出—日落 | 户外察觉 | 远程打击 |
-|---|---|---|---|
-| 1 | 07:30—19:30 | — | — |
-| 2 | 08:00—19:00 | — | — |
-| 3 | 08:30—18:30 | — | — |
-| 4 | 09:00—18:00 | 有雾时视觉−2 | — |
-| 5 | 10:00—18:00 | 视觉−1 | — |
-| 6 | 11:00—17:00 | 下雨期间视觉−2 | 下雨期间−1 |
-| 7 | 12:00—16:00 | 视觉−3 | −2 |
-| 8 | 13:00—15:00 | 视觉−3 | −3 |
-| 9 | 14:00最后瞬间升落；永夜 | 所有察觉−4 | −4 |
-
-远程减值仅为 **ranged Strike**，不扩展到全部远程法术攻击。第六章正文整句限定“户外下雨期间”，本模组停雨时暂停该章两项检定减值；不会同时关闭既有视觉强风。
-
-## 身份、场景及原生效果
-
-自动PC：有玩家所有权、PF2e阵营为队伍的 character。自动敌人：没有玩家所有权、PF2e阵营为 opposition，且棋子明确为敌对。友军、玩家控制NPC及同伴不按所有NPC统一加值；敌方仆从仍可能是敌人。中立或互相矛盾的身份不施加夜幕角色修正，GM可指定。
-
-未放置角色卡默认不处理；在「角色设置」中明确绑定场景，并按需要指定敌人／PC身份。绑定角色一旦在激活场景有 linked 棋子，棋子所在场景优先。unlinked 棋子按自身场景处理；同一 linked 角色在激活场景存在矛盾棋子设置时暂停处理。场景外／未纳入场景不受本模组影响。
-
-已有官方 **The Skies Above** 效果在“受管场景＋天气暴露已确认”时临时接管其天气规则，只保留一套当前章节修正。原物品保留，未知暴露时仍保持其手动效果行为并提示。此识别依据官方物品ID／来源UUID或对应slug，不按中文名称猜测。
-
-第9章原生效果描述写−3，而规则元素已是−4；正文也为−4，并且没有“仅视觉”限制。本模组明确以章节正文为准。第1章07:30—19:30取章节专节；总述06:00—18:00不作为本模组边界。
-
-## 仍需 GM 判断
-
-- 友敌关系、实际避风避雨、视觉／非视觉察觉；缺少 holy/fear 特征的自制能力需补正确特征，模组不会按名称猜测。
-- 浓雾的逐目标隐蔽（50英尺及更远）、寒冷防护／暴露时长／伤害、湖中游泳DC、岸边和地牢洪水困难地形、小型明火保护。面板按章给出提示；不全局加状态、移动棋子或扣血。
-- 第9章高塔间户外每10分钟一次DC17纯骰、成功后对一名PC施加10d6电击／DC30基础反射。绑定区域后，危险助手按队伍当前户外累计时间生成待办；全员离开暂停并保留已累计时间。实际暴露和目标由 GM 确认。归还徽章的剧情雷击是独立事件。
-- 第9章最后14:00瞬间日出日落由GM叙述，不每天重放，也不制造持续白昼；有特殊过渡时可暂用昼夜覆盖。
-- 终局风暴停止时勾选「剧情风暴已停止」；解除诅咒时关闭全部规则。旧官方手动效果应由GM移除，避免停用伴随接管后恢复其原来规则。
-
-## 停用与清理
-
-面板取消「启用昼夜与风暴规则」会清理本模组派生的昼夜／天气修正，并暂停助手的自动休息接入、环境计时与条件同步。助手中的单独暂停开关也可按需使用。暂停保留已确认记录和冷却，不会视为一次新休息或刷新已消费奖励。
-
-昼夜／天气部分只生成内存规则；助手明确结算所得的原生物品、效果和 HP 奖励则会保存到角色上。停用整个模组并重载后，这些已经获得的效果仍存在，由 GM 按实际条件移除或纠正。暂停不撤销已完成的物品消耗，也不自动删除原有官方效果。场景／角色上保存的配置 flags 可保留供恢复。
-
-规则面板会读取当前状态，未保存的输入保留到明确保存或关闭。缺失章节或时间会暂停自动修正并显示原因。通过 manifest 安装后，可在 Foundry 的模组管理界面检查更新；手动安装时也可用新版本 ZIP 覆盖同名文件夹。
-
-## 源码与构建
-
-[项目仓库](https://github.com/takaqiao/pf2e-bob-companion)提供源码和测试。在仓库根目录执行 `node --test tests/*.test.mjs` 可运行规则、上下文、运行时、日历、面板及四类助手的行为回归测试，无需安装 npm 依赖。测试覆盖取消、重复操作、失败重试、时间边界和当前效果；具体原生界面验证以对应版本的发布记录为准。
-
-运行 `./build.ps1` 会将安装包及 `SHA256SUMS.txt` 输出到仓库的 `dist/` 目录；可用 `./build.ps1 -Destination <输出目录>` 指定其他位置。构建使用独立暂存目录和精确的 25 文件清单，包含三个入口宏；测试、旧产物、世界数据和官方资产均不进入安装包。
+Code is available under the [MIT License](LICENSE). This is an unofficial companion module. Foundry VTT, Pathfinder and Bastion of Blasphemies belong to their respective owners. The module does not include the commercial adventure, maps, artwork or compendium packs.

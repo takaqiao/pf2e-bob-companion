@@ -1,7 +1,7 @@
-if (!game.user.isGM) return ui.notifications.warn('日历与天气同步仅供 GM 使用。');
-const companion = game.modules.get('pf2e-bob-companion')?.api;
-if (!companion?.syncCalendar) return ui.notifications.warn('请启用 BoB 伴随模组并刷新页面。');
-const result = await companion.syncCalendar({force: true});
-const message = result?.detail || result?.label || '同步请求已处理，请在 BoB 面板查看状态。';
-ui.notifications[result?.state === 'synced' ? 'info' : 'warn'](message);
+const localize = (key, fallback) => game.i18n.has(`BOB.${key}`) ? game.i18n.localize(`BOB.${key}`) : fallback;
+if (!game.user.isGM) return ui.notifications.warn(localize('Common.GMOnly', 'Only a GM can use this tool.'));
+const api = game.modules.get('pf2e-bob-companion')?.api;
+if (!api?.syncCalendar) return ui.notifications.warn(localize('Common.EnableModule', 'Enable BoB Companion and reload.'));
+const result = await api.syncCalendar({force: true});
+ui.notifications[result?.state === 'synced' ? 'info' : 'warn'](result?.detail || result?.label || localize('Calendar.Pending', 'Sync requested.'));
 return result;

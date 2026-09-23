@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {readCatalog} from './helpers/localization.mjs';
 import * as panel from '../scripts/ui.mjs';
 
 test('batch exposure writes only selected token flags and never reads actors',async t=>{
@@ -9,14 +11,29 @@ test('batch exposure writes only selected token flags and never reads actors',as
   const tokens=['a','b'].map(id=>({id,get actor(){assert.fail('exposure must not read actors');},async setFlag(namespace,key,value){updates.push([id,namespace,key,value]);}}));
   await panel.applyExposure(tokens,'indoors');
   assert.deepEqual(updates,[['a','pf2e-bob-companion','exposure','indoors'],['b','pf2e-bob-companion','exposure','indoors']]);
-  await assert.rejects(panel.applyExposure(tokens,'invalid'),/环境/);
+  await assert.rejects(panel.applyExposure(tokens,'invalid'),/BOB.UI.InvalidExposure/);
   assert.equal(updates.length,2);
 });
 
 test('player cannot batch change environment',async t=>{
   const oldGame=globalThis.game;globalThis.game={user:{isGM:false}};t.after(()=>{globalThis.game=oldGame;});
   assert.equal(typeof panel.applyExposure,'function');
-  await assert.rejects(panel.applyExposure([{setFlag(){assert.fail('player must not write');}}],'outdoors'),/GM/);
+  await assert.rejects(panel.applyExposure([{setFlag(){assert.fail('player must not write');}}],'outdoors'),/BOB.UI.GmOnly/);
+});
+
+test('environment panel has matching English and Chinese strings for every UI key',async()=>{
+  const source=await readFile(new URL('../scripts/ui.mjs',import.meta.url),'utf8');
+  const en=await readCatalog('en');
+  const zh=await readCatalog('zh-cn');
+  const keys=new Set([...source.matchAll(/\bl\('([A-Za-z]+)'/g)].map(match=>`BOB.UI.${match[1]}`));
+  for(const match of source.matchAll(/\bt\('UI\.([A-Za-z]+)'/g))keys.add(`BOB.UI.${match[1]}`);
+  keys.add('BOB.UI.Unsaved');
+  for(const key of keys){
+    assert.ok(en[key],`missing English ${key}`);assert.ok(zh[key],`missing Chinese ${key}`);
+    const placeholders=value=>[...value.matchAll(/\{([A-Za-z]+)\}/g)].map(match=>match[1]).sort();
+    assert.deepEqual(placeholders(en[key]),placeholders(zh[key]),`placeholder mismatch in ${key}`);
+  }
+  assert.ok(keys.size>100);
 });
 
 test('failed native dialog submission restores buttons so edits can be retried',async () => {
@@ -46,6 +63,8 @@ test('open console preserves drafts on status refresh, coalesces clock minutes a
   const previous=Object.fromEntries(keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   t.after(()=>{for(const key of keys)previous[key]?Object.defineProperty(globalThis,key,previous[key]):delete globalThis[key];});
   const hooks=new Map(),timers=new Map();let seq=0,calendarReads=0;
+  const en=await readCatalog('en');
+  const format=(key,values={})=>(en[key]??key).replace(/\{([A-Za-z]+)\}/g,(_match,name)=>String(values[name]??''));
   const cfg={enabled:true,chapter:9,phase:'auto',rain:'auto',weather:true,stormEnded:false,rainBreak:[780,870]};
   const nodes=new Map();
   const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{innerHTML:'',textContent:'',disabled:false,hidden:false,addEventListener(){},classList:{toggle(){}}});return nodes.get(selector);};
@@ -57,11 +76,15 @@ test('open console preserves drafts on status refresh, coalesces clock minutes a
   globalThis.canvas={tokens:{controlled:[]},scene:{name:'主岛'}};
   globalThis.ui={notifications:{warn(){}}};
   const worldTime={isValid:true,hour:23,minute:0,second:0};
-  globalThis.game={ready:false,user:{isGM:true},get actors(){assert.fail('opening or refreshing must not enumerate actors');},
+  globalThis.game={ready:false,user:{isGM:true},i18n:{format},get actors(){assert.fail('opening or refreshing must not enumerate actors');},
     pf2e:{worldClock:{worldTime}},settings:{get(){return cfg;}},modules:new Map([['pf2e-bob-companion',{api:{getCalendarStatus(){calendarReads++;return {available:false,label:'未安装日历'};}}}]])};
   const consolePanel=await panel.openPanel();
+  assert.match(node('content').innerHTML,/>Overview<\/button>/);
+  assert.match(node('content').innerHTML,/>Adventure tools<\/button>/);
+  assert.match(node('content').innerHTML,/<details class="bob-calendar-tools">/);
   consolePanel.draft.set('phase','day');
   await consolePanel.act('refresh');
+  assert.equal(node('[data-feedback]').textContent,'Status refreshed.');
   assert.equal(consolePanel.draft.value.phase,'day');assert.equal(consolePanel.draft.dirty,true);
   const initialReads=calendarReads;
   const tick=[...hooks.values()].find(hook=>hook.name==='updateWorldTime').fn;

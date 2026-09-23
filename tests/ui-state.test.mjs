@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as uiState from '../scripts/ui-state.mjs';
+import {nativeRules,environmentAt} from '../scripts/model.mjs';
 const cfg = () => ({enabled:true,chapter:0,phase:'auto',rain:'auto',weather:true,stormEnded:false,rainBreak:[780,870]});
 
 test('failed saves retain edits, and later save preserves another GM unrelated change', async () => {
@@ -20,7 +21,7 @@ test('same field changed by another GM is not silently overwritten',async () => 
   assert.equal(typeof uiState.RuleDraft,'function');
   const draft=new uiState.RuleDraft(cfg());draft.set('phase','night');
   let writes=0;
-  await assert.rejects(draft.save(() => ({...cfg(),phase:'day'}),async () => {writes++;}),/其他 GM/);
+  await assert.rejects(draft.save(() => ({...cfg(),phase:'day'}),async () => {writes++;}),/UI.DraftConflict/);
   assert.equal(writes,0);assert.equal(draft.dirty,true);assert.equal(draft.value.phase,'night');
 });
 
@@ -41,7 +42,7 @@ test('rain break validation rejects malformed, overnight and out of bounds times
   assert.equal(typeof uiState.RuleDraft,'function');
   for(const range of [[780,800],[1380,30],[1500,1590],[NaN,870]]) {
     const draft=new uiState.RuleDraft(cfg());draft.set('rainBreak',range);
-    await assert.rejects(draft.save(cfg,async () => assert.fail('must not write invalid times')),/停雨/);
+    await assert.rejects(draft.save(cfg,async () => assert.fail('must not write invalid times')),/UI.InvalidRainBreak/);
     assert.equal(draft.dirty,true);
   }
 });
@@ -49,7 +50,14 @@ test('rain break validation rejects malformed, overnight and out of bounds times
 test('rule labels identify target and expose conditions rather than pretending all modifiers apply', () => {
   assert.equal(typeof uiState.describeRule,'function');
   assert.deepEqual(uiState.describeRule({selector:'perception',value:-2,label:'风暴',predicate:['item:trait:visual']}),
-    {target:'察觉',value:'−2',source:'风暴',condition:'仅视觉检定；普通察觉需指定视觉方式',conditional:true});
-  assert.equal(uiState.describeRule({selector:'saving-throw',value:1,predicate:['item:trait:holy']}).target,'圣洁豁免');
-  assert.equal(uiState.describeRule({selector:'ranged-strike-attack-roll',value:-4}).target,'远程打击');
+    {target:'BOB.Rule.Perception',value:'−2',source:'风暴',condition:'BOB.Rule.VisualCondition',conditional:true});
+  assert.equal(uiState.describeRule({selector:'saving-throw',value:1,predicate:['item:trait:holy']}).target,'BOB.Rule.HolySave');
+  assert.equal(uiState.describeRule({selector:'ranged-strike-attack-roll',value:-4}).target,'BOB.Rule.RangedStrike');
+});
+test('the fog summary shows readable text while its native chat note retains translation markers',()=>{
+  const note=nativeRules({environment:environmentAt({chapter:4,seconds:36000}),role:'pc',exposure:'outdoors'}).find(rule=>rule.key==='Note');
+  assert.match(note.title,/data-bob-i18n/);
+  const row=uiState.describeRule(note);
+  assert.equal(row.source,'BOB.Rule.Fog');assert.equal(row.condition,'BOB.Rule.FogText');
+  assert.doesNotMatch(JSON.stringify(row),/<[^>]+>/);
 });

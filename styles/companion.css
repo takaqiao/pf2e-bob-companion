@@ -32,6 +32,7 @@
 .bob-companion .bob-field { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: .65rem 0; }
 .bob-companion .bob-field > select { width: 58%; min-width: 0; }
 .bob-companion .bob-field > input[type=checkbox] { flex: none; }
+.bob-companion .bob-field:has(> input[type=checkbox]:first-child) { justify-content: flex-start; }
 .bob-companion .bob-time-range { display: inline-flex; gap: .35rem; align-items: center; }
 .bob-companion .bob-time-range input { width: 6.4rem; }
 .bob-companion fieldset { margin: .7rem 0; padding: .4rem .7rem; }
@@ -48,7 +49,13 @@
 .bob-companion :is(button,select,input,summary):focus-visible { outline: 2px solid var(--color-warm-1, #c9593f); outline-offset: 2px; }
 .bob-companion .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 560px) { .bob-companion .bob-field { align-items: stretch; flex-direction: column; gap: .25rem; } .bob-companion .bob-field > select { width: 100%; } .bob-companion .bob-field > input[type=checkbox] { align-self: flex-end; } }
-.bob-assistant-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
-.bob-assistant-grid article { border: 1px solid var(--color-border-light-primary, #777); border-radius: 5px; padding: 12px; }
-.bob-assistant-grid p { font-size: 13px; margin-bottom: 0; }
-.bob-assistants details { margin: 12px 0; }
+.bob-companion .bob-tool-list > div { display: grid; grid-template-columns: 10rem 1fr; gap: .9rem; align-items: center; margin: .6rem 0; }
+.bob-companion .bob-tool-list p { margin: 0; }
+.bob-companion .bob-primary { font-weight: bold; border-color: var(--color-border-highlight, #a78348); }
+.bob-companion .bob-calendar-tools { margin: .5rem 0 1rem; }
+.bob-companion .bob-card { padding: .5rem 0; border-bottom: 1px solid var(--color-border-light-primary, #777); }
+.bob-companion .bob-card:last-child { border-bottom: 0; }
+.bob-companion button { white-space: normal; height: auto; min-height: 2rem; }
+.bob-companion .bob-field > input[type=number] { max-width: 10rem; }
+.bob-companion [data-soulheart-preview] { padding: .65rem; background: var(--color-bg-option, transparent); line-height: 1.55; }
+@media (max-width: 560px) { .bob-companion .bob-tool-list > div { grid-template-columns: 1fr; gap: .25rem; } }

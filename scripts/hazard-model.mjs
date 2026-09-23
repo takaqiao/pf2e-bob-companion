@@ -1,3 +1,4 @@
+import {t} from './i18n.mjs';
 const PERIOD=600,IMMUNITY=8*3600;
 const inside=(s,actor,field)=>Object.values(s.tokens??{}).some(t=>t.actorUuid===actor&&t[field]);
 function clock(s,time){
@@ -10,7 +11,7 @@ function clock(s,time){
   else if(running&&c.started===null)c.started=time;
 }
 export function advanceHazards(s,time,options={}){
-  if(!Number.isFinite(time))throw new Error('世界时间无效。');
+  if(!Number.isFinite(time))throw new Error(t('Common.ClockUnavailable'));
   if(Object.hasOwn(options,'stormEnded')&&s.stormEnded!==!!options.stormEnded)s.stormEnded=!!options.stormEnded;
   if(Object.hasOwn(options,'enabled')&&s.paused!==!options.enabled)s.paused=!options.enabled;
   clock(s,time);

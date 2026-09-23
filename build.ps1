@@ -7,7 +7,8 @@ if ($manifest.id -notmatch '^[a-z0-9][a-z0-9-]*$' -or $manifest.version -notmatc
 }
 $releaseRoot = [System.IO.Path]::GetFullPath($Destination)
 $requiredFiles = @(
-  'module.json', 'README.md', '规则依据.md',
+  'module.json', 'README.md', 'README.zh-CN.md', 'CHANGELOG.md', 'LICENSE', '规则依据.md',
+  'lang/en.json', 'lang/zh-cn.json', 'scripts/i18n.mjs',
   'scripts/main.mjs', 'scripts/runtime.mjs', 'scripts/ui.mjs', 'scripts/ui-state.mjs',
   'scripts/model.mjs', 'scripts/context.mjs', 'scripts/calendar.mjs', 'scripts/weather.mjs',
   'scripts/assistant-core.mjs', 'scripts/assistants.mjs',

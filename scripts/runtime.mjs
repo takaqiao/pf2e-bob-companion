@@ -1,3 +1,4 @@
+import {t} from './i18n.mjs';
 import {ID, OFFICIAL, MAIN_SCENE, environmentAt, classifyRole, nativeRules, knownSkyEffect} from './model.mjs';
 import {resolveScope, isManagedSkyRule, shouldManageWeather, endStorm} from './context.mjs';
 
@@ -35,7 +36,7 @@ export function getEnvironment() {
   let environment = environmentAt({chapter, seconds, phase: settings.phase, rain: settings.rain, rainBreak: settings.rainBreak});
   if (settings.stormEnded) environment = endStorm(environment);
   return {...environment, stormEnded: Boolean(settings.stormEnded), chapter, chapterSource, seconds, time: Number.isFinite(seconds)
-    ? `${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}` : '未知'};
+    ? `${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}` : t('Common.Unknown')};
 }
 
 const flags = document => document?.flags?.[ID] ?? {};
@@ -52,20 +53,20 @@ function actorStatus(actor) {
   const settings = config();
   const empty = {environment, enabled: false, sceneId: null, reason: '', role: 'unknown', exposure: 'unknown',
     perception: 'auto', rules: [], managedWeather: false, officialEffects: []};
-  if (!actor) return {...empty, reason: '请选择 token 或角色查看适用状态。'};
+  if (!actor) return {...empty, reason: t('Environment.SelectActor')};
   const officialEffects = Array.from(actor.items ?? []).flatMap(item => {
     const chapter = knownSkyEffect(item);
     return chapter ? [{id: item.id, name: item.name, chapter}] : [];
   });
   const result = {...empty, officialEffects};
-  if (!settings.enabled) return {...result, reason: officialEffects.length ? '伴随模组已停用；现有 Skies Above 物品恢复自身规则。' : '伴随模组已停用。'};
-  if (!environment.valid) return {...result, reason: '章节或 PF2e 世界钟不可用；请设置章节并检查世界钟。'};
-  if (!['character', 'npc'].includes(actor.type)) return {...result, reason: '仅对人物和 NPC 处理检定修正。'};
+  if (!settings.enabled) return {...result, reason: officialEffects.length ? t('Environment.DisabledNative') : t('Environment.Disabled')};
+  if (!environment.valid) return {...result, reason: t('Environment.InvalidClock')};
+  if (!['character', 'npc'].includes(actor.type)) return {...result, reason: t('Environment.ActorType')};
 
   const activeScene = game.scenes?.active;
   const token = actor.isToken ? actor.token : null;
   if (actor.isToken && (!token || token.actorLink || token.actorId !== actor.id)) {
-    return {...result, reason: '此合成角色已不属于原棋子。'};
+    return {...result, reason: t('Environment.DetachedActor')};
   }
   const tokens = token ? [token] : Array.from(activeScene?.tokens ?? []).filter(document => document.actorLink && document.actorId === actor.id);
   const sceneId = token?.parent?.id ?? tokens[0]?.parent?.id ?? flags(actor).sceneId;
@@ -78,16 +79,16 @@ function actorStatus(actor) {
   const role = classifyRole({type: actor.type, owned: actor.hasPlayerOwner, alliance: actor.system.details?.alliance,
     dispositions: scope.dispositions, traits: actor.system.traits?.value ?? [], override: scope.roleOverride});
   result.role = role;
-  if (role === 'ignore') return {...result, reason: '此角色已明确排除。'};
+  if (role === 'ignore') return {...result, reason: t('Environment.ExcludedActor')};
   result.enabled = true;
   result.managedWeather = shouldManageWeather({enabled: scope.enabled, weather: settings.weather,
     exposure: scope.exposure, stormEnded: settings.stormEnded});
   if (settings.stormEnded && result.managedWeather && scope.exposure === 'unknown') {
-    result.reason = '已明确风暴结束；在此适用场景中停用旧天气规则，暴露仍待确认。';
+    result.reason = t('Environment.StormEndedUnknown');
   }
   result.rules = nativeRules({environment, role, exposure: result.managedWeather ? scope.exposure : 'unknown', perception: scope.perception});
-  if (role === 'unknown') result.reason = [result.reason, '角色身份未确认，未应用 PC/敌人夜幕修正。'].filter(Boolean).join(' ');
-  if (officialEffects.length && !result.managedWeather) result.reason = [result.reason, '现有 Skies Above 效果保留原有规则。'].filter(Boolean).join(' ');
+  if (role === 'unknown') result.reason = [result.reason, t('Environment.UnknownRole')].filter(Boolean).join(' ');
+  if (officialEffects.length && !result.managedWeather) result.reason = [result.reason, t('Environment.NativeWeather')].filter(Boolean).join(' ');
   return result;
 }
 
@@ -96,7 +97,7 @@ export function status(actor) {
   const result = actorStatus(actor);
   if (lastError) result.reason = [result.reason, lastError].filter(Boolean).join(' ');
   if (globalThis.game?.ready && !installed) return {...result, enabled: false, rules: [], managedWeather: false,
-    reason: '规则包装尚未启用；请检查 PF2e 与 libWrapper。'};
+    reason: t('Environment.NotReady')};
   return result;
 }
 
@@ -117,12 +118,12 @@ function prepareRules(wrapped, ...args) {
     }
     let additional = [];
     if (state.rules.length) {
-      const source = {name: 'BoB：昼夜与章节环境', type: 'effect', img: 'systems/pf2e/icons/default-icons/effect.svg',
+      const source = {name: t('Environment.EffectName'), type: 'effect', img: 'systems/pf2e/icons/default-icons/effect.svg',
         flags: {[ID]: {transient: true}}, system: {slug: 'bob-companion-environment', duration: {unit: 'unlimited', value: -1, expiry: null},
           tokenIcon: {show: false}, rules: state.rules}};
       const effect = new CONFIG.PF2E.Item.documentClasses.effect(source, {parent: this});
       additional = effect.prepareRuleElements();
-      if (additional.length !== state.rules.length || additional.some(rule => rule.invalid)) throw new Error('临时规则未通过 PF2e 验证');
+      if (additional.length !== state.rules.length || additional.some(rule => rule.invalid)) throw new Error(t('Environment.InvalidRules'));
     }
     // Filter the prepared rule list, never the existing item's source or system.rules.
     const retained = state.managedWeather ? original.filter(rule =>
@@ -136,7 +137,7 @@ function prepareRules(wrapped, ...args) {
     preparedSignatures.set(this, ruleSignature(state));
     return rules;
   } catch (error) {
-    lastError = 'BoB 临时规则准备失败；已保留角色原有规则。';
+    lastError = t('Environment.PrepareFailed');
     console.error(`${ID} | ${lastError}`, error);
     if (game.user?.isGM && !errorNotified) {
       errorNotified = true;
@@ -247,24 +248,24 @@ export function registerRuntime() {
   registered = true;
   const module = game.modules.get(ID);
   if (module) module.api = {...module.api, status, refresh, getEnvironment};
-  game.settings.register(ID, 'config', {name: 'BoB 环境设置', scope: 'world', config: false, type: Object,
+  game.settings.register(ID, 'config', {name: t('Environment.Settings'), scope: 'world', config: false, type: Object,
     default: {...DEFAULT_CONFIG, rainBreak: [...DEFAULT_CONFIG.rainBreak]}, onChange: queueRefresh});
   Hooks.once('ready', () => {
     if (game.system.id !== 'pf2e' || !globalThis.libWrapper || !CONFIG.PF2E?.Item?.documentClasses?.effect) {
       console.error(`${ID} | 需要 PF2e 和 libWrapper。`);
-      if (game.user.isGM) ui.notifications.warn('BoB 伴随模组未启用：需要 PF2e 与 libWrapper。');
+      if (game.user.isGM) ui.notifications.warn(t('Environment.Dependencies'));
       return;
     }
     try { libWrapper.register(ID, TARGET, prepareRules, 'WRAPPER'); }
     catch (error) {
-      lastError = 'BoB 规则接口注册失败，请检查版本兼容性。';
+      lastError = t('Environment.WrapperFailed');
       console.error(`${ID} | ${lastError}`, error);
       if (game.user.isGM) ui.notifications.error(lastError);
       return;
     }
     installed = true;
     refresh();
-    if (game.user.isGM && !getEnvironment().valid) ui.notifications.warn('BoB 伴随模组：章节或 PF2e 世界钟不可用，请打开设置检查。');
+    if (game.user.isGM && !getEnvironment().valid) ui.notifications.warn(t('Environment.CheckSettings'));
   });
   Hooks.on('updateWorldTime', () => { if (environmentKey() !== lastEnvironmentKey) queueRefresh(); });
   Hooks.on('updateSetting', setting => {

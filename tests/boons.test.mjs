@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recordBoon, consumeBoon, transferBoon, correctBoon, voidBoon, cooldownRemaining, crossedDawn, c45Active, expireBoons} from '../scripts/boon-model.mjs';
-import {boonEffectData, boonRoomActors, createBoonController} from '../scripts/boons.mjs';
+import {boonEffectData, boonRoomActors, boonBathClock, createBoonController} from '../scripts/boons.mjs';
+import {translateItem} from '../scripts/i18n.mjs';
 
 const meditate = (id, actorId, at, extra = {}) => ({id, kind:'A14', actorId, start:at-3600, at, degree:'success', cleaned:true, ...extra});
 
@@ -11,7 +12,7 @@ test('weekly meditation is individual, applies to all outcomes, and does not res
   assert.equal(cooldownRemaining(state,'A14','a',608399),1);
   assert.equal(cooldownRemaining(state,'A14','a',608400),0);
   assert.equal(cooldownRemaining(state,'A14','b',3600),0);
-  assert.throws(() => recordBoon(state,meditate('m2','a',0)), /冷却/);
+  assert.throws(() => recordBoon(state,meditate('m2','a',0)), /BOB\.Boon\.Error\.Cooldown/);
   assert.equal(state.uses.m1.bonus,1);
   assert.equal(state.uses.m1.expiresAt,90000);
   recordBoon(state,meditate('m3','b',3600,{degree:'failure',cleaned:false}));
@@ -27,7 +28,7 @@ test('meditation critical success lasts one week and explicit consumption cannot
   consumeBoon(state,{id:'consume1',useId:'m1',at:4000});
   consumeBoon(state,{id:'consume1',useId:'m1',at:5000});
   assert.equal(state.uses.m1.consumedAt,4000);
-  assert.throws(() => consumeBoon(state,{id:'consume2',useId:'m1',at:5000}), /已消费/);
+  assert.throws(() => consumeBoon(state,{id:'consume2',useId:'m1',at:5000}), /BOB\.Boon\.Error\.Consumed/);
 });
 
 test('bath requires one hour, uses individual weekly cooldown and crossing dawn grants only the remaining day', () => {
@@ -35,7 +36,7 @@ test('bath requires one hour, uses individual weekly cooldown and crossing dawn 
   assert.equal(crossedDawn({start:25000,at:28600,dayStart:0,dawn:27000}),true);
   assert.equal(crossedDawn({start:28000,at:31600,dayStart:0,dawn:27000}),false);
   assert.equal(crossedDawn({start:26000,at:27000,dayStart:0,dawn:27000}),true);
-  assert.throws(() => recordBoon(state,{id:'b0',kind:'A19',actorId:'a',start:0,at:3599}), /1 小时/);
+  assert.throws(() => recordBoon(state,{id:'b0',kind:'A19',actorId:'a',start:0,at:3599}), /BOB\.Boon\.Error\.OneHour/);
   recordBoon(state,{id:'b1',kind:'A19',actorId:'a',start:25000,at:28600,dayStart:0,dawn:27000});
   assert.equal(state.uses.b1.expiresAt,86400);
   assert.equal(state.uses.b1.diseasePending,true);
@@ -46,7 +47,7 @@ test('bath requires one hour, uses individual weekly cooldown and crossing dawn 
 test('statues share a 24h cooldown and bonus requires bound room, daylight and 8h duration', () => {
   const state = {};
   recordBoon(state,{id:'c1',kind:'C45',actorId:'a',at:10000,choice:'crafting'});
-  assert.throws(() => recordBoon(state,{id:'c2',kind:'C45',actorId:'b',at:96399,choice:'athletics'}), /冷却/);
+  assert.throws(() => recordBoon(state,{id:'c2',kind:'C45',actorId:'b',at:96399,choice:'athletics'}), /BOB\.Boon\.Error\.Cooldown/);
   assert.equal(c45Active(state.uses.c1,{at:38799,inRoom:true,day:true}),true);
   for (const context of [{at:38800,inRoom:true,day:true},{at:11000,inRoom:false,day:true},{at:11000,inRoom:true,day:false},{at:9999,inRoom:true,day:true}]) {
     assert.equal(c45Active(state.uses.c1,context),false);
@@ -59,7 +60,7 @@ test('gear boons have one holder, transfer and one-use ledger with idempotent op
   recordBoon(state,{id:'g1',kind:'G4',actorId:'a',at:10});
   recordBoon(state,{id:'g1',kind:'G4',actorId:'a',at:10});
   assert.equal(Object.keys(state.uses).length,1);
-  assert.throws(() => recordBoon(state,{id:'g2',kind:'G4',actorId:'a',at:11}), /持有/);
+  assert.throws(() => recordBoon(state,{id:'g2',kind:'G4',actorId:'a',at:11}), /BOB\.Boon\.Error\.AlreadyHolds/);
   transferBoon(state,{id:'t1',useId:'g1',actorId:'b',at:12});
   transferBoon(state,{id:'t1',useId:'g1',actorId:'b',at:12});
   assert.equal(state.uses.g1.actorId,'b');
@@ -67,7 +68,7 @@ test('gear boons have one holder, transfer and one-use ledger with idempotent op
   assert.doesNotThrow(()=>recordBoon(state,{id:'g1',kind:'G4',actorId:'a',at:10}));
   consumeBoon(state,{id:'x1',useId:'g1',at:15});
   assert.equal(state.uses.g1.consumedAt,15);
-  assert.throws(() => transferBoon(state,{id:'t2',useId:'g1',actorId:'a',at:16}), /已消费/);
+  assert.throws(() => transferBoon(state,{id:'t2',useId:'g1',actorId:'a',at:16}), /BOB\.Boon\.Error\.Consumed/);
   recordBoon(state,{id:'g3',kind:'G4',actorId:'a',at:20});
 });
 
@@ -108,6 +109,43 @@ test('native rule payload limits meditation to Int skills and sanitizes official
   assert.equal(bath.system.description.value.includes('plot'),false);
   assert.deepEqual(bath.system.rules[0].predicate,['action:craft']);
   assert.equal(bath.system.duration.value,100/60);
+  assert.equal(meditation.flags['pf2e-bob-companion'].localization.name,'Boon.Effect.Meditation.Name');
+  assert.deepEqual(meditation.flags['pf2e-bob-companion'].localization.rules.map(rule=>rule.index),[1]);
+  assert.equal(bath.flags['pf2e-bob-companion'].localization.description,'Boon.Effect.Bath.Description');
+});
+
+test('bath midnight and dawn come from the active clock, including a completion just after midnight', () => {
+  const clock=boonBathClock({at:86400+1800,now:86400+1800,environment:{valid:true,seconds:1800,dawn:450,chapter:2}});
+  assert.deepEqual(clock,{dayStart:86400,dawn:27000});
+  const earlier=boonBathClock({at:86400+600,now:86400+1800,environment:{valid:true,seconds:1800,dawn:450,chapter:2}});
+  assert.deepEqual(earlier,{dayStart:86400,dawn:27000});
+  assert.throws(()=>boonBathClock({at:3600,now:3600,environment:{valid:false,seconds:3600,dawn:450}}),/ClockUnavailable/);
+  assert.throws(()=>boonBathClock({at:3600,now:3600,environment:{valid:true,seconds:3600,dawn:NaN}}),/ClockUnavailable/);
+  assert.throws(()=>boonBathClock({at:100,now:500,environment:{valid:true,seconds:300,dawn:450}}),/PreviousDay/);
+});
+
+test('owned boon item and rule note can render in each client language from saved keys', () => {
+  const prior=globalThis.game;
+  const messages={
+    'BOB.Boon.Effect.Meditation.Name':{en:'Mental insight',zh:'心智启迪'},
+    'BOB.Boon.Effect.Meditation.Description':{en:'<p>Bonus +{bonus}</p>',zh:'<p>加值 +{bonus}</p>'},
+    'BOB.Boon.Effect.Meditation.NoteTitle':{en:'Insight',zh:'启迪'},
+    'BOB.Boon.Effect.Meditation.NoteText':{en:'Use it once',zh:'使用一次'}
+  };
+  let language='en';
+  globalThis.game={i18n:{format:(key,values={})=>String(messages[key]?.[language]??key).replace(/\{(\w+)\}/g,(_,name)=>values[name]??'')}};
+  try {
+    const data=boonEffectData({id:'one',kind:'A14',at:0,expiresAt:86400,bonus:2});
+    assert.equal(data.name,'Mental insight');
+    assert.equal(data.system.description.value,'<p>Bonus +2</p>');
+    language='zh';translateItem(data);
+    assert.equal(data.name,'心智启迪');
+    assert.equal(data.system.description.value,'<p>加值 +2</p>');
+    assert.equal(data.system.rules[1].title.replace(/<[^>]*>/g,''),'启迪');
+    assert.equal(data.system.rules[1].text.replace(/<[^>]*>/g,''),'使用一次');
+    assert.match(data.system.rules[1].title,/data-bob-i18n="BOB.Boon.Effect.Meditation.NoteTitle"/);
+    assert.match(data.system.rules[1].text,/data-bob-i18n="BOB.Boon.Effect.Meditation.NoteText"/);
+  } finally {globalThis.game=prior;}
 });
 
 function fixture({roomActors:roomQuery}={}) {
@@ -219,13 +257,13 @@ test('voiding a mistaken grant clears only its cooldown and effect and retains t
 
 test('rejecting a conflicting repeated operation ID preserves the original boon', () => {
   const s={};recordBoon(s,meditate('one','a',3600));
-  assert.throws(()=>recordBoon(s,meditate('one','b',3600)),/操作 ID/);
+  assert.throws(()=>recordBoon(s,meditate('one','b',3600)),/BOB\.Boon\.Error\.OperationActorConflict/);
   assert.equal(s.uses.one.actorId,'a');
 });
 
 test('bath day calibration rejects an unrelated midnight instead of creating an incorrect-duration bonus', () => {
   const state={};
-  assert.throws(()=>recordBoon(state,{id:'bath',kind:'A19',actorId:'a',start:25000,at:28600,dayStart:86400,dawn:27000}),/午夜/);
+  assert.throws(()=>recordBoon(state,{id:'bath',kind:'A19',actorId:'a',start:25000,at:28600,dayStart:86400,dawn:27000}),/BOB\.Boon\.Error\.Midnight/);
   assert.equal(Object.keys(state.uses??{}).length,0);
 });
 

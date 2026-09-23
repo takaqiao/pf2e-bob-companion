@@ -91,6 +91,6 @@ test('ended storm removes recurring dangers but preserves the single final sunri
   assert.equal(result.fog, false);
   assert.equal(result.raining, false);
   assert.equal(result.notes.length, 2);
-  assert.match(result.notes[0], /残留积水与寒冷/);
-  assert.match(result.notes[1], /最后一次/);
+  assert.equal(result.notes[0], 'BOB.Environment.StormEndedNote');
+  assert.equal(result.notes[1], 'BOB.Environment.FinalSun');
 });

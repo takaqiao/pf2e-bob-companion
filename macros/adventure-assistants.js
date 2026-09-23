@@ -1,4 +1,5 @@
-if (!game.user.isGM) return ui.notifications.warn('此入口仅供 GM 使用。');
+const localize = (key, fallback) => game.i18n.has(`BOB.${key}`) ? game.i18n.localize(`BOB.${key}`) : fallback;
+if (!game.user.isGM) return ui.notifications.warn(localize('Common.GMOnly', 'Only a GM can use this tool.'));
 const api = game.modules.get('pf2e-bob-companion')?.api;
-if (!api?.openAssistants) return ui.notifications.warn('请启用 BoB 伴随模组并刷新页面。');
+if (!api?.openAssistants) return ui.notifications.warn(localize('Common.EnableModule', 'Enable BoB Companion and reload.'));
 await api.openAssistants();

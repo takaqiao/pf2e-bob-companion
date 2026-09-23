@@ -1,7 +1,8 @@
 import {ID} from './model.mjs';
+import {t,localizeHTML} from './i18n.mjs';
 import {isPrimaryGM,requirePrimaryGM,now,escapeHtml as esc,readState,updateState,withAction,whisperGM,partyMembers} from './assistant-core.mjs';
 import {setMembership,advanceHazards,resolveFoul,requestFoul,resolveLightning,removeTrackedToken} from './hazard-model.mjs';
-const DOMAIN='hazards',labels={dungeon:'地牢（免疫离开计时）',foul:'污秽空气',tower:'高塔户外'};
+const DOMAIN='hazards',labels=()=>({dungeon:t('Hazard.Dungeon'),foul:t('Hazard.FoulAir'),tower:t('Hazard.Tower')});
 const report=error=>ui.notifications.error(error.message);
 const stormEnded=()=>!!game.settings.get(ID,'config')?.stormEnded;
 const enabled=()=>game.settings.get(ID,'config')?.enabled!==false;
@@ -11,7 +12,7 @@ async function change(mutator){
     const previous=structuredClone(s.requests??{});mutator(s);
     added=Object.entries(s.requests??{}).some(([key,r])=>!previous[key]||(r.count??0)>(previous[key].count??0));
   });
-  if(added)await whisperGM('<p>有环境检定待确认。请打开「冒险助手 → 环境危险」。角色是否实际暴露及结算结果由 GM 确认。</p>');
+  if(added)await whisperGM(localizeHTML('Hazard.PendingChat'));
   return result;
 }
 function membership(token,state,recalculate=false){
@@ -42,29 +43,29 @@ export async function refreshHazards({recalculate=false}={}){
 }
 export async function bindHazardRegion(regionUuid,type){
   requirePrimaryGM();const region=await fromUuid(regionUuid);
-  if(region?.documentName!=='Region'||(type&&!Object.hasOwn(labels,type)))throw new Error('请选择有效区域与用途。');
+  if(region?.documentName!=='Region'||(type&&!Object.hasOwn(labels(),type)))throw new Error(t('Hazard.InvalidRegion'));
   await updateState(DOMAIN,s=>{s.bindings??={};if(type)s.bindings[regionUuid]=type;else delete s.bindings[regionUuid];});
   // Removing the final binding must also clear previously tracked exposure.
   for(const token of region.parent.tokens)await trackHazardToken(token);
 }
 async function resolveAir(actorUuid,success){
   return withAction(`foul:${actorUuid}`,()=>change(s=>{
-    if(!s.requests?.[`foul:${actorUuid}`])throw new Error('此待办已处理。');
+    if(!s.requests?.[`foul:${actorUuid}`])throw new Error(t('Hazard.AlreadyHandled'));
     resolveFoul(s,actorUuid,success,now());
   }));
 }
 async function rollAir(actorUuid){
   requirePrimaryGM();const actor=await fromUuid(actorUuid);
-  if(!actor?.saves?.fortitude)throw new Error('角色已不存在或无法进行强韧豁免。');
+  if(!actor?.saves?.fortitude)throw new Error(t('Hazard.NoFortitude'));
   await actor.saves.fortitude.roll({dc:{value:25},messageMode:'gm'});
 }
 async function rollLightning(){
   return withAction('lightning:roll',async()=>{
-    const pending=readState(DOMAIN).requests?.lightning;if(!pending)throw new Error('没有待结算的雷击时段。');
+    const pending=readState(DOMAIN).requests?.lightning;if(!pending)throw new Error(t('Hazard.NoLightning'));
     const roll=await new Roll('1d20').evaluate();
-    await roll.toMessage({flavor:'环境检定（平检 DC 17）',whisper:game.users.filter(u=>u.isGM).map(u=>u.id)},{rollMode:'gmroll'});
+    await roll.toMessage({flavor:localizeHTML('Hazard.FlatCheck'),whisper:game.users.filter(u=>u.isGM).map(u=>u.id)},{rollMode:'gmroll'});
     await updateState(DOMAIN,s=>{if(!s.requests?.lightning)return;if(s.requests.lightning.count>1)s.requests.lightning.count--;else resolveLightning(s);});
-    if(roll.total>=17)await whisperGM('<p>此次检定成功。由 GM 从实际在户外的角色中指定一名：承受 10d6 电击伤害，DC 30 基础反射豁免。先确认遮蔽与免疫，再手动结算；尚未自动扣除生命值。</p>');
+    if(roll.total>=17)await whisperGM(localizeHTML('Hazard.LightningHit'));
     return roll.total;
   });
 }
@@ -73,8 +74,8 @@ function body(){
   const s=readState(DOMAIN),scene=canvas.scene;
   const regions=Array.from(scene?.regions??[],r=>[r.uuid,r.name]);
   const requests=Object.values(s.requests??{});
-  const air=requests.filter(r=>r.kind==='foul').map(r=>`<li>${esc(game.actors.get(r.actorUuid.split('.').at(-1))?.name??'角色')}：DC 25 强韧 <button type="button" data-air="roll" data-actor="${esc(r.actorUuid)}">GM 检定</button><button type="button" data-air="success" data-actor="${esc(r.actorUuid)}">确认成功</button><button type="button" data-air="failure" data-actor="${esc(r.actorUuid)}">已处理／无暴露</button></li>`).join('');
-  return `<p>仅主 GM 结算。使用原生区域追踪队伍；不自动判定是否呼吸，也不自动造成伤害。</p><h3>待办</h3>${air?`<ul>${air}</ul>`:'<p>没有待处理的空气检定。</p>'}${s.requests?.lightning?`<p>户外雷击：累计 ${s.requests.lightning.count} 次待确认。</p><button type="button" data-hazard="roll-lightning">结算一次平检</button><button type="button" data-hazard="clear-lightning">确认这些时段无需结算</button>`:'<p>没有待处理的雷击检定。</p>'}<details><summary>区域与计时设置</summary><p>地牢离开超过 8 小时才失去空气免疫。污秽区域也视为地牢；请为其余地牢范围另设区域。高塔按队伍户外累计，每 10 分钟一次；全员离开暂停。风暴停止状态沿用规则面板。</p><p>当前场景：${esc(scene?.name??'未载入')}</p>${regions.length?`<label>区域 <select name="region">${options(regions,'')}</select></label><label>用途 <select name="hazardType">${options([['','移除用途'],...Object.entries(labels)],'')}</select></label><button type="button" data-hazard="bind">保存区域用途</button>`:'<p>先用原生区域工具画出需要追踪的范围。</p>'}<ul>${Object.entries(s.bindings??{}).map(([uuid,type])=>`<li>${esc(fromUuidSync(uuid)?.name??uuid)}：${esc(labels[type])}</li>`).join('')}</ul><p>免疫记录：${Object.entries(s.actors??{}).filter(([,a])=>a.immune).map(([uuid])=>esc(fromUuidSync(uuid)?.name??'角色')).join('、')||'无'}</p></details><p class="bob-warning" data-error></p>`;
+  const air=requests.filter(r=>r.kind==='foul').map(r=>`<li>${esc(game.actors.get(r.actorUuid.split('.').at(-1))?.name??t('Common.Actor'))} — ${t('Hazard.Fortitude')}<div class="bob-toolbar"><button type="button" data-air="roll" data-actor="${esc(r.actorUuid)}">${t('Hazard.Roll')}</button><button type="button" data-air="success" data-actor="${esc(r.actorUuid)}">${t('Hazard.Success')}</button><button type="button" data-air="failure" data-actor="${esc(r.actorUuid)}">${t('Hazard.Handled')}</button></div></li>`).join('');
+  return `<p class="hint">${t('Hazard.Intro')}</p><h3>${t('Hazard.FoulAir')}</h3>${air?`<ul>${air}</ul>`:`<p>${t('Hazard.NoAir')}</p>`}<h3>${t('Hazard.Lightning')}</h3>${s.requests?.lightning?`<p>${t('Hazard.LightningCount',{count:s.requests.lightning.count})}</p><div class="bob-toolbar"><button type="button" data-hazard="roll-lightning">${t('Hazard.RollLightning')}</button><button type="button" data-hazard="clear-lightning">${t('Hazard.ClearLightning')}</button></div>`:`<p>${t('Hazard.NoLightning')}</p>`}<details><summary>${t('Hazard.Setup')}</summary><p class="hint">${t('Hazard.TimerHint')}</p><p>${t('Hazard.Scene',{name:esc(scene?.name??t('Common.NoScene'))})}</p>${regions.length?`<label class="bob-field">${t('Hazard.Region')}<select name="region">${options(regions,'')}</select></label><label class="bob-field">${t('Hazard.Use')}<select name="hazardType">${options([['',t('Hazard.Unbind')],...Object.entries(labels())],'')}</select></label><button type="button" data-hazard="bind">${t('Common.Save')}</button>`:`<p>${t('Hazard.DrawRegion')}</p>`}<ul>${Object.entries(s.bindings??{}).map(([uuid,type])=>`<li>${esc(fromUuidSync(uuid)?.name??t('Hazard.MissingRegion'))}: ${esc(labels()[type])}</li>`).join('')}</ul><p>${t('Hazard.Immunity')}: ${Object.entries(s.actors??{}).filter(([,a])=>a.immune).map(([uuid])=>esc(fromUuidSync(uuid)?.name??t('Common.Actor'))).join(', ')||t('Common.None')}</p></details><p class="bob-warning" data-error role="alert"></p>`;
 }
 let opening,activeWindow;
 export function openHazards(){
@@ -82,7 +83,7 @@ export function openHazards(){
   opening=showHazards().finally(()=>{opening=null;activeWindow=null;});return opening;
 }
 async function showHazards(){
-  if(!game.user?.isGM)throw new Error('冒险助手仅供 GM 使用。');
+  if(!game.user?.isGM)throw new Error(t('Common.GMOnly'));
   if(isPrimaryGM())await refreshHazards();
   class Panel extends foundry.applications.api.DialogV2 {
     async _onRender(context,options){await super._onRender(context,options);this.element.addEventListener('click',async event=>{
@@ -91,13 +92,13 @@ async function showHazards(){
         if(b.dataset.air==='roll')await rollAir(b.dataset.actor);
         else if(b.dataset.air)await resolveAir(b.dataset.actor,b.dataset.air==='success');
         else if(b.dataset.hazard==='roll-lightning')await rollLightning();
-        else if(b.dataset.hazard==='clear-lightning'){if(await foundry.applications.api.DialogV2.confirm({window:{title:'确认已处理'},content:'<p>清除当前累计的雷击待办？已累计的户外时间仍保留。</p>'}))await updateState(DOMAIN,s=>resolveLightning(s));}
+        else if(b.dataset.hazard==='clear-lightning'){if(await foundry.applications.api.DialogV2.confirm({window:{title:t('Hazard.ClearLightning')},content:`<p>${t('Hazard.ClearConfirm')}</p>`}))await updateState(DOMAIN,s=>resolveLightning(s));}
         else if(b.dataset.hazard==='bind')await bindHazardRegion(this.element.querySelector('[name="region"]').value,this.element.querySelector('[name="hazardType"]').value);
         await this.close();void openHazards();
       }catch(error){this.element.querySelector('[data-error]').textContent=error.message;}finally{this.busy=false;b.disabled=false;}
     });}
   }
-  return Panel.wait({window:{title:'BoB｜环境危险',resizable:true},render:(_event,dialog)=>{activeWindow=dialog;},position:{width:640},classes:['bob-companion'],content:body(),buttons:[{action:'close',label:'关闭'}]});
+  return Panel.wait({window:{title:`BoB | ${t('Hub.Hazards')}`,resizable:true},render:(_event,dialog)=>{activeWindow=dialog;},position:{width:600},classes:['bob-companion'],content:body(),buttons:[{action:'close',label:t('Common.Close')}]});
 }
 export function registerHazards(){
   Hooks.once('ready',()=>{const mod=game.modules.get(ID);Object.assign(mod.api??={}, {openHazards,bindHazardRegion,refreshHazards});});
