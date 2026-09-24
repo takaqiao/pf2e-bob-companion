@@ -1,61 +1,474 @@
-.bob-companion { font-family: var(--font-body, inherit); }
-.bob-console .window-content { padding: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
-.bob-console .bob-tabs { display: flex; flex: 0 0 auto; border-bottom: 1px solid var(--color-border-light-primary, #777); padding: 0 .7rem; gap: .25rem; }
-.bob-console .bob-tabs button { flex: 1; border: 0; border-radius: 0; background: none; box-shadow: none; padding: .8rem .3rem; height: auto; border-bottom: 3px solid transparent; }
-.bob-console .bob-tabs button[aria-selected=true] { border-bottom-color: var(--color-warm-1, #c9593f); font-weight: bold; }
-.bob-console .bob-body { flex: 1; min-height: 0; overflow-y: auto; padding: .9rem 1rem; }
-.bob-companion [hidden] { display: none !important; }
-.bob-companion h2 { font-size: 1.05rem; margin: .45rem 0; border: none; }
-.bob-companion h3 { font-size: 1rem; margin: .3rem 0; }
-.bob-companion p { margin: .4rem 0; line-height: 1.5; }
-.bob-companion .hint { color: var(--color-text-secondary, inherit); font-size: .88em; }
-.bob-companion .bob-now { border-left: 3px solid var(--color-warm-1, #c9593f); padding: .25rem .65rem; }
-.bob-companion .bob-now > div, .bob-companion .bob-sync, .bob-companion .bob-section-title { display: flex; align-items: baseline; justify-content: space-between; gap: .7rem; flex-wrap: wrap; }
-.bob-companion .bob-now strong { font-size: 1.15rem; }
-.bob-companion .bob-sync { margin-top: .65rem; font-size: .9em; }
-.bob-companion .bob-section-title { margin-top: .9rem; border-bottom: 1px solid var(--color-border-light-primary, #777); }
-.bob-companion .bob-section-title > span { font-size: .85em; }
-.bob-companion .bob-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; margin: .65rem 0; }
-.bob-companion .bob-toolbar button { flex: 0 1 auto; width: auto; min-height: 2rem; height: auto; padding: .3rem .65rem; white-space: normal; }
-.bob-companion .bob-subject { margin: .85rem 0; padding-bottom: .65rem; border-bottom: 1px solid var(--color-border-light-secondary, #777); }
-.bob-companion .bob-subject h3 > span { font-size: .82em; font-weight: normal; margin-left: .4rem; }
-.bob-companion .bob-rules { width: 100%; margin: .45rem 0 0; table-layout: fixed; font-size: .9em; }
-.bob-companion .bob-rules th, .bob-companion .bob-rules td { padding: .4rem .45rem; text-align: left; overflow-wrap: anywhere; }
-.bob-companion .bob-rules th:first-child { width: 24%; }
-.bob-companion .bob-rules th:nth-child(2) { width: 19%; }
-.bob-companion .bob-rules small { display: block; line-height: 1.4; color: var(--color-text-secondary, inherit); margin-top: .15rem; }
-.bob-companion .bob-modifier { font-weight: bold; font-variant-numeric: tabular-nums; }
-.bob-companion .bob-empty { padding: .9rem .5rem; text-align: center; }
-.bob-companion .bob-empty p { max-width: 34em; margin-inline: auto; font-size: .9em; }
-.bob-companion .bob-warning { border-left: 2px solid var(--color-level-warning, #c98925); padding-left: .5rem; }
-.bob-companion .bob-warning:empty { display: none; }
-.bob-companion .bob-field { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: .65rem 0; }
-.bob-companion .bob-field > select { width: 58%; min-width: 0; }
-.bob-companion .bob-field > input[type=checkbox] { flex: none; }
-.bob-companion .bob-field:has(> input[type=checkbox]:first-child) { justify-content: flex-start; }
-.bob-companion .bob-time-range { display: inline-flex; gap: .35rem; align-items: center; }
-.bob-companion .bob-time-range input { width: 6.4rem; }
-.bob-companion fieldset { margin: .7rem 0; padding: .4rem .7rem; }
-.bob-companion details { margin-top: .85rem; }
-.bob-companion details ul { padding-left: 1.2rem; font-size: .9em; line-height: 1.55; }
-.bob-companion summary { cursor: pointer; }
-.bob-companion .bob-footer { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding: .65rem 1rem; border-top: 1px solid var(--color-border-light-primary, #777); }
-.bob-companion .bob-footer > span { font-size: .85em; }
-.bob-companion .bob-footer > div { display: flex; flex-wrap: wrap; gap: .4rem; }
-.bob-companion .bob-footer button { width: auto; padding-inline: .6rem; }
-.bob-companion .bob-feedback { flex: 0 0 auto; font-size: .85em; padding: 0 1rem .6rem; margin: 0; }
-.bob-companion .bob-feedback:empty { display: none; }
-.bob-companion .dialog-content { max-height: 70vh; overflow-y: auto; }
-.bob-companion :is(button,select,input,summary):focus-visible { outline: 2px solid var(--color-warm-1, #c9593f); outline-offset: 2px; }
-.bob-companion .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (max-width: 560px) { .bob-companion .bob-field { align-items: stretch; flex-direction: column; gap: .25rem; } .bob-companion .bob-field > select { width: 100%; } .bob-companion .bob-field > input[type=checkbox] { align-self: flex-end; } }
-.bob-companion .bob-tool-list > div { display: grid; grid-template-columns: 10rem 1fr; gap: .9rem; align-items: center; margin: .6rem 0; }
-.bob-companion .bob-tool-list p { margin: 0; }
-.bob-companion .bob-primary { font-weight: bold; border-color: var(--color-border-highlight, #a78348); }
-.bob-companion .bob-calendar-tools { margin: .5rem 0 1rem; }
-.bob-companion .bob-card { padding: .5rem 0; border-bottom: 1px solid var(--color-border-light-primary, #777); }
-.bob-companion .bob-card:last-child { border-bottom: 0; }
-.bob-companion button { white-space: normal; height: auto; min-height: 2rem; }
-.bob-companion .bob-field > input[type=number] { max-width: 10rem; }
-.bob-companion [data-soulheart-preview] { padding: .65rem; background: var(--color-bg-option, transparent); line-height: 1.55; }
-@media (max-width: 560px) { .bob-companion .bob-tool-list > div { grid-template-columns: 1fr; gap: .25rem; } }
+/* Use Foundry's theme and keep panel content readable when a window is resized. */
+.bob-companion {
+  --bob-line: var(--color-border-light-primary, #888);
+  --bob-muted: var(--color-text-secondary, inherit);
+  --bob-accent: var(--color-border-highlight, #775b32);
+  font-family: var(--font-body, system-ui), 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: var(--font-size-14, 14px);
+  line-height: 1.6;
+  max-width: calc(100vw - 2rem);
+}
+
+.bob-companion .window-content {
+  container: bob-panel / inline-size;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.bob-companion .dialog-content {
+  gap: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0 0.25rem 0.5rem;
+  scrollbar-gutter: stable;
+}
+
+.bob-companion [hidden] {
+  display: none !important;
+}
+.bob-companion :is(h2, h3, p, li, label, td, th, button) {
+  overflow-wrap: anywhere;
+}
+.bob-companion :is(h2, h3) {
+  border: 0;
+  font-family: inherit;
+  line-height: 1.4;
+}
+.bob-companion h2 {
+  font-size: 1.15em;
+  margin: 0 0 0.5rem;
+}
+.bob-companion h3 {
+  font-size: 1em;
+  margin: 0 0 0.4rem;
+}
+.bob-companion p {
+  margin: 0.4rem 0 0.75rem;
+}
+.bob-companion :is(.hint, .bob-hint) {
+  color: var(--bob-muted);
+  font-size: 0.94em;
+  line-height: 1.6;
+}
+.bob-companion :is(.hint, .bob-hint):last-child {
+  margin-bottom: 0;
+}
+.bob-companion .bob-section {
+  margin: 0 0 1.25rem;
+}
+.bob-companion .bob-section:last-child {
+  margin-bottom: 0;
+}
+.bob-companion .bob-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+.bob-companion .bob-section-title > span {
+  color: var(--bob-muted);
+  font-size: 0.94em;
+}
+
+.bob-companion button {
+  min-height: 2.25rem;
+  height: auto;
+  padding: 0.4rem 0.75rem;
+  line-height: 1.4;
+  white-space: normal;
+}
+.bob-companion .bob-primary {
+  font-weight: 600;
+  border-color: var(--bob-accent);
+}
+.bob-companion :is(.bob-toolbar, .bob-boon-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.bob-companion :is(.bob-toolbar, .bob-boon-actions) button {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+}
+.bob-companion .bob-boon-actions button {
+  flex: 1 1 45%;
+}
+.bob-companion .form-footer {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.bob-companion .form-footer button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bob-companion .bob-tool-list {
+  display: grid;
+  gap: 0;
+}
+.bob-companion .bob-tool-link {
+  display: block;
+  width: 100%;
+  padding: 1rem 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--bob-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+}
+.bob-companion .bob-tool-link:last-child {
+  border-bottom: 0;
+}
+.bob-companion .bob-tool-link:hover {
+  background: var(--color-bg-option, rgba(127, 127, 127, 0.12));
+}
+
+.bob-companion :is(.bob-field, .form-group) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.8rem 0;
+  min-width: 0;
+}
+.bob-companion :is(.bob-field, .form-group) > :is(span, label):first-child {
+  flex: 1 1 35%;
+}
+.bob-companion
+  :is(.bob-field, .form-group)
+  > :is(select, input:not([type='checkbox']), textarea, .form-fields) {
+  flex: 1 1 60%;
+  min-width: 0;
+  width: 60%;
+}
+.bob-companion :is(select, input, textarea) {
+  font: inherit;
+  max-width: 100%;
+}
+.bob-companion :is(select, input:not([type='checkbox'], [type='radio'])) {
+  min-height: 2.25rem;
+}
+.bob-companion :is(.bob-field, .form-group) > input[type='checkbox'] {
+  flex: none;
+  align-self: center;
+}
+.bob-companion .bob-field:has(> input[type='checkbox']:first-child) {
+  justify-content: flex-start;
+  align-items: center;
+}
+.bob-companion .bob-field:has(> input[type='checkbox']:first-child) > span {
+  flex: 1;
+}
+.bob-companion .bob-time-range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.bob-companion .bob-time-range input {
+  width: 7rem;
+}
+.bob-companion fieldset {
+  min-width: 0;
+  margin: 1rem 0;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border: 1px solid var(--bob-line);
+  border-radius: 4px;
+}
+.bob-companion legend {
+  padding: 0 0.3rem;
+  font-weight: 600;
+}
+.bob-companion .bob-check-list {
+  display: grid;
+  gap: 0.35rem;
+}
+.bob-companion .bob-check-list label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.bob-companion .bob-check-list input {
+  flex: none;
+  align-self: center;
+}
+
+.bob-companion details {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--bob-line);
+}
+.bob-companion summary {
+  cursor: pointer;
+  padding: 0.4rem 0;
+  font-weight: 600;
+}
+.bob-companion details[open] > summary {
+  margin-bottom: 0.5rem;
+}
+.bob-companion details ul {
+  padding-left: 1.25rem;
+}
+.bob-companion .bob-record-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+.bob-companion .bob-record-list > li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--bob-line);
+}
+.bob-companion .bob-record-list > li:last-child {
+  border-bottom: 0;
+}
+.bob-companion .bob-record-list p {
+  margin: 0.25rem 0;
+}
+.bob-companion .bob-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.bob-companion .bob-record > div {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.bob-companion .bob-record > button {
+  width: auto;
+}
+.bob-companion .bob-card {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--bob-line);
+}
+.bob-companion .bob-card:last-child {
+  border-bottom: 0;
+}
+.bob-companion .bob-empty {
+  padding: 0.5rem 0;
+  text-align: left;
+  color: var(--bob-muted);
+}
+.bob-companion .bob-empty p {
+  max-width: 44em;
+}
+.bob-companion .bob-warning {
+  border-left: 3px solid var(--color-level-warning, #915d16);
+  padding: 0.4rem 0.65rem;
+}
+.bob-companion :is(.bob-warning, .bob-feedback):empty {
+  display: none;
+}
+
+.bob-companion table {
+  width: 100%;
+  table-layout: fixed;
+  margin: 0.75rem 0;
+  font-size: 0.94em;
+}
+.bob-companion :is(th, td) {
+  padding: 0.55rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.bob-companion th {
+  font-weight: 600;
+}
+.bob-companion .bob-rules th:first-child {
+  width: 24%;
+}
+.bob-companion .bob-rules th:nth-child(2) {
+  width: 19%;
+}
+.bob-companion .bob-rules small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--bob-muted);
+}
+.bob-companion .bob-modifier {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bob-companion [data-soulheart-preview] {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-left: 3px solid var(--bob-accent);
+  background: var(--color-bg-option, transparent);
+}
+.bob-companion [data-soulheart-preview] > :first-child {
+  margin-top: 0;
+}
+.bob-companion [data-soulheart-preview] > :last-child {
+  margin-bottom: 0;
+}
+.bob-companion .bob-proposal {
+  white-space: pre-line;
+}
+
+.bob-console .window-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.bob-console .bob-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--bob-line);
+  padding: 0 0.75rem;
+  gap: 0.5rem;
+}
+.bob-console .bob-tabs button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0.75rem 0.3rem;
+  border-bottom: 3px solid transparent;
+}
+.bob-console .bob-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--bob-accent);
+  font-weight: 600;
+}
+.bob-console .bob-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+  scrollbar-gutter: stable;
+}
+.bob-companion .bob-now {
+  padding: 0 0 0.5rem;
+}
+.bob-companion .bob-now-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.bob-companion .bob-now strong {
+  font-size: 1.2em;
+}
+.bob-companion .bob-clock {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bob-companion :is(.bob-meta, .bob-sync) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 0.5rem 0;
+}
+.bob-companion .bob-sync {
+  font-size: 0.94em;
+  color: var(--bob-muted);
+}
+.bob-companion .bob-sync strong {
+  color: var(--color-text-primary, inherit);
+  font-weight: 500;
+}
+.bob-companion .bob-subject {
+  margin: 1rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bob-line);
+}
+.bob-companion .bob-subject h3 > span {
+  font-size: 0.94em;
+  font-weight: normal;
+  margin-left: 0.5rem;
+}
+.bob-companion .bob-calendar-tools {
+  margin: 0.5rem 0 1rem;
+}
+.bob-companion .bob-footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--bob-line);
+}
+.bob-companion .bob-footer > span {
+  font-size: 0.94em;
+}
+.bob-companion .bob-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.bob-companion .bob-footer button {
+  width: auto;
+}
+.bob-companion .bob-feedback {
+  flex: 0 0 auto;
+  font-size: 0.94em;
+  padding: 0 1rem 0.75rem;
+  margin: 0;
+}
+.bob-companion :is(button, select, input, textarea, summary):focus-visible {
+  outline: 2px solid var(--bob-accent);
+  outline-offset: 2px;
+}
+.bob-companion .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@container bob-panel (max-width: 480px) {
+  .bob-companion :is(.bob-field, .form-group) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+  .bob-companion
+    :is(.bob-field, .form-group)
+    > :is(select, input:not([type='checkbox']), textarea, .form-fields) {
+    width: 100%;
+    flex-basis: auto;
+  }
+  .bob-companion :is(.bob-field, .form-group):has(> input[type='checkbox']) {
+    flex-direction: row;
+    align-items: center;
+  }
+  .bob-companion .bob-field:has(> input[type='checkbox']:first-child) {
+    justify-content: flex-start;
+  }
+  .bob-companion .bob-boon-actions button {
+    flex-basis: 100%;
+  }
+  .bob-companion :is(th, td) {
+    padding-inline: 0.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bob-companion *,
+  .bob-companion *::before,
+  .bob-companion *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

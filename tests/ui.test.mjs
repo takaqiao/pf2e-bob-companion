@@ -84,7 +84,7 @@ test('open console preserves drafts on status refresh, coalesces clock minutes a
   assert.match(node('content').innerHTML,/<details class="bob-calendar-tools">/);
   consolePanel.draft.set('phase','day');
   await consolePanel.act('refresh');
-  assert.equal(node('[data-feedback]').textContent,'Status refreshed.');
+  assert.equal(node('[data-feedback]').textContent,format('BOB.UI.Refreshed'));
   assert.equal(consolePanel.draft.value.phase,'day');assert.equal(consolePanel.draft.dirty,true);
   const initialReads=calendarReads;
   const tick=[...hooks.values()].find(hook=>hook.name==='updateWorldTime').fn;

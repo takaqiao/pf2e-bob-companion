@@ -1,5 +1,13 @@
 # Changes
 
+## 0.4.1
+
+- Expand compact panel code and break up long HTML templates.
+- Group rest records, hazard checks and soulheart history by task.
+- Improve narrow-window layouts, form labels and English and Chinese instructions.
+- Put first-time rest setup and boon follow-up records within reach.
+- Trim repeated help text and show soulheart changes on separate lines.
+
 ## 0.4.0
 
 - Add English and Simplified Chinese, including effect descriptions and chat.

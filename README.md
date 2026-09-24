@@ -2,59 +2,54 @@
 
 [简体中文](README.zh-CN.md)
 
-GM tools for running *Bastion of Blasphemies* in PF2e.
+GM tools for PF2e's *Bastion of Blasphemies*: chapter weather, rests and nightmares, boons, hazards and soulhearts
 
-- Apply chapter-based day, night and weather modifiers.
-- Confirm Party rests and resolve nightmare saves.
-- Track boons, cooldowns, foul air and tower lightning.
-- Use soulhearts with a single selection and preview form.
-- Sync chapter weather with an existing Calendaria setup.
-
-## Requirements
-
-Tested with Foundry VTT **14.368**, PF2e **8.5.1** and libWrapper **1.13.5.1+**. The official adventure **1.0.0** supplies the items and rules used by the adventure tools. Those tools require its imported world content. Environment rules can also use a manually selected chapter.
-
-Calendaria **1.4.2** is optional. Sync requires the existing BoB calendar zones and weather presets; the module does not create a calendar.
+Open **BoB adventure tools** in Module Settings, or **Adventure tools** from the environment panel in the Actors directory
 
 ## Install
 
-In Foundry's module installer, paste this manifest URL:
+Paste this into Foundry's module installer:
 
 ```text
 https://github.com/takaqiao/pf2e-bob-companion/releases/latest/download/module.json
 ```
 
-Enable the module and libWrapper, then reload. Open **BoB adventure tools** in Module Settings, or use **Adventure tools** from the environment panel in the Actors directory.
+Enable the module and libWrapper, then reload
+
+Tested with Foundry VTT **14.368**, PF2e **8.5.1** and libWrapper **1.13.5.1+**. Adventure tools require the imported content from the official adventure **1.0.0**; environment rules also support a manually selected chapter
+
+Optional: Calendaria **1.4.2** with existing BoB chapter zones and weather presets
 
 ## First use
 
-1. In the environment panel, check the chapter and clock. Under **Scene setup**, include your map and mark indoor or sheltered Regions. The official main island is included by default.
-2. Under **Rest → Advanced**, set whether the campaign's previous first nights have already been handled. Party rests then appear for confirmation.
-3. Bind hazard Regions and the boon room before using their automatic tracking.
-4. For an existing campaign, check the soulheart HP total under **Soulhearts → Advanced**. New characters can receive the party's existing reward there.
+1. Check the chapter and clock. Under **Scene setup**, include your map and mark sheltered Regions; the official main island is included by default
+2. Open **Rest and nightmares** and record whether previous first nights have been handled
+3. Bind hazard Regions and the boon room
+4. For an existing campaign, check the HP total under **Soulhearts → Advanced**; new characters can receive the existing reward there
 
-Soulheart actions show the actual item, phantom rank and each recipient's HP change before applying them. Recovery and corrections are under Advanced. Use a pending operation's retry action after a failed write.
+## Use
 
-The GM confirms story prerequisites, actual exposure, counteract checks and damage. Players see their current rolls and effects. Research continues in the existing adventure scene.
+| Tool | Action |
+| --- | --- |
+| Rest and nightmares | Confirm who slept, then resolve saves |
+| Boons | Record use, check cooldowns, and finish pending checks under Records and follow-up |
+| Hazards | Check exposure, shelter and immunity, then roll or record results |
+| Soulhearts | Choose a purpose and confirm the quantity, rank and HP changes |
 
-## Languages
+Corrections and recovery are under **Advanced**. Continue an existing entry if a soulheart operation is interrupted. The GM confirms story prerequisites, counteract results and damage
 
-English and Simplified Chinese follow each client's Foundry language. Chinese supports both `cn` and `zh-cn`. Module-created effect names, descriptions and marked chat messages render in each viewer's language. User-created names and other packages' content keep their own translations. Existing chat history keeps its saved text.
+Pausing rules keeps rewards and records while pausing rest capture, hazard tracking and conditional boon updates. Disabling the module keeps saved items and effects; remove them when their story conditions end
 
-## Settings and performance
+Calendaria keeps manual weather until the next chapter or until you resume automatic sync
 
-The environment panel has Overview, Scene setup and Advanced tabs. Ordinary movement within the same environment does not reprepare actors. Normal clock ticks do not save hazard records unless a boundary changes. No frame loop or polling is added.
-
-Pausing environment rules also pauses automatic rest intake, hazard tracking and conditional boon updates. It keeps completed rewards and records. Saved items and effects remain when the module is disabled; remove them when their in-game conditions end.
-
-Calendaria sync preserves manual weather until the next chapter or until the GM resumes sync. It uses the existing world clock and leaves scene visuals and sound to the adventure.
+English and Chinese follow each client's language, including `cn` and `zh-cn`. Existing chat keeps its saved text
 
 ## Development
 
-Run tests with `node --test tests/*.test.mjs`. Build a release in PowerShell with `./build.ps1`. The archive contains the runtime, languages, documentation and three optional macro scripts. Tests and adventure assets are excluded.
+Tests: `node --test tests/*.test.mjs`
+
+Build: `./build.ps1` in PowerShell
 
 [Changes](CHANGELOG.md) · [Issues](https://github.com/takaqiao/pf2e-bob-companion/issues)
 
-## License
-
-Code is available under the [MIT License](LICENSE). This is an unofficial companion module. Foundry VTT, Pathfinder and Bastion of Blasphemies belong to their respective owners. The module does not include the commercial adventure, maps, artwork or compendium packs.
+[MIT License](LICENSE). Unofficial companion module; names and adventure content belong to their respective owners. The archive contains no commercial adventure, maps, artwork or compendium packs
