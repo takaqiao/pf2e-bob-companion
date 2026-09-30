@@ -31,7 +31,30 @@
           "performance": "本次为 6 环稳固脚步，反制调整值 +17。请核对<a class=\"content-link\" data-uuid=\"{source}\">原生恩典条目</a>并结算适用效果。"
         },
         "Targets": "使用时房内目标：{targets}",
-        "TargetsMissing": "未记录目标。请 GM 确认实际在场者"
+        "TargetsMissing": "未记录目标。请 GM 确认实际在场者",
+        "Meditation": "冥想 · {actor}",
+        "Captured": "已记录结果：{outcome}",
+        "AwaitSave": "投掷意志豁免，再应用已记录结果",
+        "Applied": "已应用",
+        "Apply": "应用已记录结果",
+        "NoPendingSave": "没有等待投掷的冥想豁免",
+        "Stale": "结果已变化，请使用更新后的聊天卡",
+        "Granted": "{actor}：{boon}",
+        "Followup": "处理原生疾病或反制效果，再在下方确认",
+        "ConfirmFollowup": "确认后续效果已处理",
+        "FollowupConfirmed": "GM 已确认后续效果",
+        "GearAvailable": "可用于一次检定，原生检定后会在 GM 聊天卡提供使用选项",
+        "GearCheck": "{actor}：预兆恩惠 · 检定总值 {total}",
+        "GearChoice": "是否为此次检定使用 +2 状态加值？",
+        "GearSelect": "用于此次检定",
+        "GearDecline": "保留恩惠",
+        "GearDeclined": "已保留恩惠",
+        "GearCorrection": "按加值叠加与成功程度规则，将 +2 状态加值用于原生检定，再确认。此卡尚未修改掷骰结果",
+        "GearConfirm": "确认结果已修正并消耗恩惠",
+        "GearSpent": "已记录使用；GM 已确认结果修正",
+        "RerollDuringApply": "应用期间出现了重掷，已保留预留结果；继续前请检查记录",
+        "ReviewResult": "在维护工具中检查结果",
+        "Resolution": "效果：{outcome}"
       },
       "ChooseRecord": "选择记录",
       "Cleaned": "竖石已清理",
@@ -281,8 +304,15 @@
       "Records": "冒险记录",
       "Save": "保存",
       "SyncUpdate": "记录更新必须同步完成",
-      "Title": "BoB｜冒险管理",
-      "Unknown": "未知"
+      "Title": "BoB",
+      "Unknown": "未知",
+      "CurrentEffectName": "当前效果",
+      "CurrentEffectDescription": "<p>当前调整已计入角色数据。</p>",
+      "CurrentModifier": "当前调整",
+      "CurrentHPName": "最大生命值提升",
+      "CurrentHPDescription": "<p>最大生命值提升 {value}。</p>",
+      "CurrentTempHPName": "临时生命值",
+      "CurrentTempHPDescription": "<p>临时生命值：{value}。</p>"
     },
     "Environment": {
       "ActorType": "仅适用于人物与 NPC",
@@ -343,7 +373,7 @@
       "NoAir": "无待处理豁免",
       "NoFortitude": "角色已不存在或无法进行强韧豁免",
       "NoLightning": "无待处理检定",
-      "PendingChat": "环境检定待处理，可在冒险管理中查看",
+      "PendingChat": "GM 聊天中有待处理的危险检定",
       "Region": "区域",
       "Roll": "投掷强韧豁免",
       "RollLightning": "投掷雷击检定",
@@ -353,21 +383,34 @@
       "TimerHint": "空气免疫在连续离开地牢超过 8 小时后失效。污秽区域包含地牢标记；其余地牢范围也需绑定。高塔按队伍户外时间累计，每 10 分钟检定一次，全员离开时暂停",
       "Tower": "高塔户外",
       "Unbind": "移除绑定",
-      "Use": "用途"
+      "Use": "用途",
+      "Chat": {
+        "Paused": "危险自动处理已暂停",
+        "Stale": "暴露状态或结果已变化，请使用更新后的聊天卡",
+        "RollPending": "此次暴露已有进行中的豁免",
+        "Captured": "已记录结果：{outcome}",
+        "Air": "污浊空气 · {actor}",
+        "Apply": "应用免疫",
+        "Handled": "已处理",
+        "FailureHelp": "处理原生失败后果后再关闭此次暴露；不会获得免疫",
+        "ConfirmConsequences": "确认后果已处理",
+        "Unexposed": "确认角色未暴露",
+        "Consequences": "关闭此次暴露前，请确认原生失败后果已处理"
+      }
     },
     "Hub": {
       "Boons": "恩惠",
       "Hazards": "环境危险",
-      "Hint": "休息、恩惠、环境危险与魂心",
+      "Hint": "日常检定在聊天卡中处理；这里用于设置、修正和恢复",
       "InstallMacros": "创建或更新宏",
       "MacrosReady": "宏已就绪，可从宏目录拖至快捷栏",
-      "Menu": "BoB 冒险管理",
+      "Menu": "BoB 维护工具",
       "NotReady": "功能未就绪，请刷新",
-      "Open": "打开冒险管理",
+      "Open": "打开维护工具",
       "Rest": "休息与噩梦",
       "Shortcuts": "快捷宏",
       "Soulhearts": "魂心",
-      "Title": "冒险管理",
+      "Title": "维护工具",
       "UseSoulheart": "使用魂心"
     },
     "Nightmare": {
@@ -481,7 +524,7 @@
       "SaveAlreadyRolled": "本次休息已进行过意志豁免",
       "SaveCorrection": "保存校准",
       "SaveNotOwned": "只能为自己有权限的角色检定",
-      "SaveRequest": "{actor}：请进行当前意志豁免（DC {dc}）",
+      "SaveRequest": "{actor}：请进行意志豁免",
       "SaveSetup": "保存设置",
       "Settled": "已结算：{outcome}",
       "Setup": "设置",
@@ -493,7 +536,22 @@
       "UneaseName": "梦后不安",
       "UnknownTime": "时间未知",
       "WillSave": "意志豁免",
-      "SaveOutcome": "豁免结果"
+      "SaveOutcome": "豁免结果",
+      "NeutralSaveRequest": "{actor}：请进行意志豁免",
+      "RollRemaining": "投掷剩余豁免（{count}）",
+      "ApplyRecorded": "应用已记录结果（{count}）",
+      "RecordedSaveRequired": "请先完成原生豁免，再应用结果",
+      "ProposalChanged": "掷骰结果已变化，请查看更新后的卡片再应用",
+      "FearCardTitle": "新获得惊惧",
+      "FearCardHint": "{actor} 新获得惊惧 {value}。确认这是首次新获得后，应用 +1",
+      "FearCardApplied": "惊惧加值已应用",
+      "RestCanceled": "此休息不适用",
+      "FearValueChanged": "记录时为惊惧 {before}，当前为 {value}；确认变化后再应用",
+      "UseCurrentFear": "使用当前惊惧值",
+      "FearConditionMissing": "记录的状态已移除或被替换；请确认先前加值是否已处理",
+      "ConfirmFearHandled": "确认先前加值已处理",
+      "FearHandled": "GM 已将先前惊惧加值标记为已处理",
+      "FearReceiptRecovery": "中断的调整已有处理记录；重试原操作，或确认先前加值已处理"
     },
     "Rule": {
       "Attack": "攻击检定",
@@ -601,7 +659,7 @@
       "ActorToEdit": "要编辑的角色",
       "ActualExposure": "遮蔽",
       "Advanced": "高级",
-      "AdventureTools": "冒险管理",
+      "AdventureTools": "维护工具",
       "Automatic": "自动",
       "CalendarControls": "日历操作",
       "CalendarDisconnected": "未连接日历",
@@ -772,7 +830,36 @@
       "SevereCold": "严重寒冷",
       "Snow": "短暂飞雪",
       "StormEnded": "风暴已停止，请手动设置当前天气",
-      "SunnyBreak": "短暂放晴"
+      "SunnyBreak": "短暂放晴",
+      "Display": {
+        "ColdDrizzle": {
+          "Label": "寒冷细雨",
+          "Description": "空气寒冷，伴有细雨。"
+        },
+        "ColdRain": {
+          "Label": "冷雨",
+          "Description": "空气寒冷，正在下雨。"
+        },
+        "ColdOvercast": {
+          "Label": "寒冷阴天",
+          "Description": "空气寒冷，天空阴沉。"
+        },
+        "ColdThunderstorm": {
+          "Label": "寒冷雷雨",
+          "Description": "空气寒冷，伴有降雨和雷声。"
+        },
+        "SevereThunderstorm": {
+          "Label": "强雷暴",
+          "Description": "大雨、强风和雷声。"
+        },
+        "ColdSnow": {
+          "Label": "寒冷降雪",
+          "Description": "空气寒冷，正在降雪。"
+        }
+      }
+    },
+    "Chat": {
+      "ActionFailed": "此操作未完成"
     }
   }
 }

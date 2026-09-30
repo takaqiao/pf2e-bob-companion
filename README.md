@@ -4,7 +4,7 @@
 
 GM tools for PF2e's *Bastion of Blasphemies*: chapter weather, rests and nightmares, boons, hazards and soulhearts
 
-Open **BoB adventure tools** in Module Settings, or **Adventure tools** from the environment panel in the Actors directory
+Routine checks appear in chat. Open **BoB maintenance** in Module Settings for setup, corrections and recovery
 
 ## Install
 
@@ -31,18 +31,18 @@ Optional: Calendaria **1.4.2** with existing BoB chapter zones and weather prese
 
 | Tool | Action |
 | --- | --- |
-| Rest and nightmares | Confirm who slept, then resolve saves |
-| Boons | Record use, check cooldowns, and finish pending checks under Records and follow-up |
-| Hazards | Check exposure, shelter and immunity, then roll or record results |
+| Rest and nightmares | After a native rest, confirm who slept on the GM chat card; roll saves and apply the recorded results |
+| Boons | Declare a use, then handle its check in chat; a meditation bonus is spent when the native roll uses it |
+| Hazards | Roll pending checks from GM chat cards, then apply the captured result; confirm damage or other manual consequences |
 | Soulhearts | Choose a purpose and confirm the quantity, rank and HP changes |
 
-Corrections and recovery are under **Advanced**. Continue an existing entry if a soulheart operation is interrupted. The GM confirms story prerequisites, counteract results and damage
+Chat cards update in place and prevent duplicate application. Story prerequisites, counteract results, retrospective bonuses and damage still require GM confirmation. Corrections and recovery are under **Maintenance tools → Advanced**. Continue an existing entry if a soulheart operation is interrupted
 
 Pausing rules keeps rewards and records while pausing rest capture, hazard tracking and conditional boon updates. Disabling the module keeps saved items and effects; remove them when their story conditions end
 
 Calendaria keeps manual weather until the next chapter or until you resume automatic sync
 
-English and Chinese follow each client's language, including `cn` and `zh-cn`. Existing chat keeps its saved text
+English and Chinese follow each client's language, including `cn` and `zh-cn`. Players see current adjustments without unrevealed triggers or future consequences; detailed settlement cards are whispered to GMs
 
 ## Development
 

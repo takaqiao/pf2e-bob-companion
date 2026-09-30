@@ -1,5 +1,6 @@
 import { ID } from './model.mjs';
 import { getEnvironment } from './runtime.mjs';
+import { upsertGMCard, registerCardActions } from './chat-cards.mjs';
 import {
   readState,
   updateState,
@@ -41,7 +42,7 @@ const SPELLS = {
 };
 const LABELS = { A14: 'Boon.A14', A19: 'Boon.A19', C45: 'Boon.C45', G4: 'Boon.G4' };
 const label = (kind) => t(LABELS[kind]);
-const flag = (item) => item.flags?.[ID]?.boon;
+const flag = (item) => item?.flags?.[ID]?.boon;
 const signature = (use) =>
   JSON.stringify([
     use.id,
@@ -84,6 +85,7 @@ export function boonEffectData(use, source, at = use.at) {
     data.system.rules = [
       {
         key: 'FlatModifier',
+        slug: `bob-meditation-${use.id}`,
         selector: ['int-skill-check'],
         type: 'circumstance',
         value: use.bonus
@@ -472,6 +474,245 @@ const minutesAgo = (at) =>
   number('minutesAgo', t('Boon.MinutesAgo'), 0) +
   `<small>${t('Boon.CompletedAt', { time: formatTime(at) })}</small>`;
 
+const degrees = new Set(['criticalSuccess', 'success', 'failure', 'criticalFailure']);
+const chatEnabled = () => enabled() && state().enabled !== false;
+const rollBusy = new Set();
+// Capture arrival synchronously: settings writes and native Item creation can still be pending.
+const arrivingMeditationResults = new Map();
+const chatButton = (action, key, {actorId, messageId} = {}) =>
+  `<button type="button" data-bob-card-action="${action}"${actorId ? ` data-actor="${escapeHtml(actorId)}"` : ''}${messageId ? ` data-message-id="${escapeHtml(messageId)}"` : ''}>${localizeHTML(key)}</button>`;
+const chatSection = content => `<section class="bob-companion bob-chat-card">${content}</section>`;
+const actorRefForMessage = message => message.actor?.uuid ?? actorByRef(message.speaker?.actor)?.uuid;
+
+async function publishMeditation(id) {
+  const request = state().requests?.[id];
+  if (!request) return;
+  const actor = actorByRef(request.actorId), suggestion = request.suggestion;
+  const completed = request.applied;
+  const effective = suggestion?.outcome === 'failure' && !request.cleaned ? 'criticalFailure' : suggestion?.outcome;
+  const titleCase = value => value[0].toUpperCase() + value.slice(1);
+  const result = suggestion ? `<p>${localizeHTML('Boon.Chat.Captured', {}, {
+    outcome:`Nightmare.Outcome${titleCase(suggestion.outcome)}`
+  })}</p><p>${localizeHTML('Boon.Chat.Resolution', {}, {
+    outcome:`Boon.Degree.${titleCase(effective)}`
+  })}</p>` : `<p>${localizeHTML('Boon.Chat.AwaitSave')}</p>`;
+  const actions = completed ? `<p>${localizeHTML('Boon.Chat.Applied')}</p>` :
+    suggestion ? chatButton('meditation-apply', 'Boon.Chat.Apply', {messageId: suggestion.messageId}) :
+      chatButton('meditation-roll', 'Boon.RollWill');
+  return upsertGMCard({domain: 'boons', id, content: chatSection(
+    `<h3>${localizeHTML('Boon.Chat.Meditation', {actor: actor?.name ?? t('Common.Actor')})}</h3>${result}` +
+    (request.lateReroll ? `<p class="bob-warning">${localizeHTML('Boon.Chat.RerollDuringApply')}</p>` + chatButton('meditation-review', 'Boon.Chat.ReviewResult') : '') +
+    `<div class="bob-toolbar">${actions}</div>`)});
+}
+
+/** Only an explicit GM declaration starts meditation; a save result never invents that declaration. */
+export async function requestMeditationWorkflow(input) {
+  requirePrimaryGM();
+  if (!chatEnabled()) throw new Error(t('Boon.Paused'));
+  if (!input.confirmed) throw new Error(t('Boon.Error.ConfirmConditions'));
+  if (!input.id || !Number.isFinite(input.at) || !Number.isFinite(input.start) || input.at - input.start < 3600)
+    throw new Error(t('Boon.Error.OneHour'));
+  const actor = actorByRef(input.actorId);
+  if (!actor?.saves?.will?.roll) throw new Error(t('Boon.Error.NoWill'));
+  await withAction('boon-chat', () => updateState('boons', draft => {
+    const prior = draft.requests?.[input.id];
+    if (prior) {
+      if (prior.actorId !== actor.uuid || prior.at !== input.at || prior.start !== input.start || prior.cleaned !== Boolean(input.cleaned))
+        throw new Error(t('Boon.Error.OperationConflict'));
+      return;
+    }
+    if (cooldownRemaining(draft, 'A14', actor.uuid, input.at)) throw new Error(t('Boon.Error.Cooldown'));
+    (draft.requests ??= {})[input.id] = {id: input.id, kind: 'A14', actorId: actor.uuid,
+      at: input.at, start: input.start, cleaned: Boolean(input.cleaned)};
+  }));
+  return publishMeditation(input.id);
+}
+
+export async function rollMeditationRequest({id}) {
+  requirePrimaryGM();
+  if (!chatEnabled()) throw new Error(t('Boon.Paused'));
+  const request = state().requests?.[id];
+  if (!request || request.applied || request.suggestion || rollBusy.has(id)) throw new Error(t('Boon.Chat.NoPendingSave'));
+  const actor = actorByRef(request.actorId);
+  if (!actor?.saves?.will?.roll) throw new Error(t('Boon.Error.NoWill'));
+  rollBusy.add(id);
+  try {
+    return await actor.saves.will.roll({dc: {value: request.cleaned ? 20 : 25},
+      label: t('Boon.WillRoll'), extraRollOptions: ['action:meditate', `bob-boon:${id}`], messageMode: 'gm'});
+  } finally {rollBusy.delete(id);}
+}
+
+export async function applyMeditationResult({id, messageId}) {
+  return withAction('boon-chat', async () => {
+    if (!chatEnabled()) throw new Error(t('Boon.Paused'));
+    const request = state().requests?.[id];
+    if (!request?.suggestion || request.suggestion.messageId !== messageId)
+      throw new Error(t('Boon.Chat.Stale'));
+    if (request.applied) return publishMeditation(id);
+    if (arrivingMeditationResults.get(id)?.messageId && arrivingMeditationResults.get(id).messageId !== messageId && !state().uses?.[id])
+      throw new Error(t('Boon.Chat.Stale'));
+    // Reserve the exact shown native result before any effect document write. Retries use it.
+    const application = request.application ?? {messageId, input: {id, kind: 'A14', actorId: request.actorId,
+      start: request.start, at: request.at, cleaned: request.cleaned, degree: request.suggestion.outcome}};
+    if (application.messageId !== messageId) throw new Error(t('Boon.Chat.Stale'));
+    await updateState('boons', draft => {draft.requests[id].application = application;});
+    if (arrivingMeditationResults.get(id)?.messageId && arrivingMeditationResults.get(id).messageId !== messageId && !state().uses?.[id]) {
+      await updateState('boons', draft => {delete draft.requests[id].application;});
+      throw new Error(t('Boon.Chat.Stale'));
+    }
+    try {await getController().use(application.input);}
+    catch (error) {
+      await updateState('boons', draft => {
+        const arriving = arrivingMeditationResults.get(id);
+        if (arriving && arriving.messageId !== messageId) draft.requests[id].lateReroll = arriving;
+      });
+      await publishMeditation(id);
+      throw error;
+    }
+    await updateState('boons', draft => {
+      draft.requests[id].applied = {at: now(), messageId};
+      const arriving = arrivingMeditationResults.get(id);
+      if (arriving && arriving.messageId !== messageId) draft.requests[id].lateReroll = arriving;
+    });
+    const late = arrivingMeditationResults.get(id);
+    if (late && late.messageId !== messageId && state().requests[id].lateReroll?.messageId !== late.messageId)
+      await updateState('boons', draft => {draft.requests[id].lateReroll = late;});
+    arrivingMeditationResults.delete(id);
+    return publishMeditation(id);
+  });
+}
+
+async function publishBoonUse(id) {
+  const use = state().uses?.[id];
+  if (!use || use.voided) return;
+  const actor = actorByRef(use.actorId);
+  const pending = use.diseasePending || use.cleansePending;
+  const actions = (use.status === 'pending' ? chatButton('boon-retry', 'Boon.Action.Retry') : '') +
+    (pending ? chatButton('boon-request', 'Boon.Action.Request') + chatButton('boon-resolved', 'Boon.Chat.ConfirmFollowup') : '');
+  return upsertGMCard({domain: 'boons', id: `use:${id}`, content: chatSection(
+    `<h3>${localizeHTML('Boon.Chat.Granted', {actor: actor?.name ?? t('Common.Actor')}, {boon: LABELS[use.kind]})}</h3>` +
+    `<p>${localizeHTML(use.status === 'pending' ? 'Boon.Status.Retry' : pending ? 'Boon.Chat.Followup' : use.consumedAt != null ? 'Boon.Status.Consumed' : use.kind === 'G4' ? 'Boon.Chat.GearAvailable' : 'Boon.Chat.Applied')}</p>` +
+    `<div class="bob-toolbar">${actions}</div>`)});
+}
+
+async function publishGear(id) {
+  const request = state().gearRequests?.[id];
+  if (!request) return;
+  const actor = actorByRef(request.actorId);
+  const status = request.applied ? 'Boon.Chat.GearSpent' : request.declined ? 'Boon.Chat.GearDeclined' :
+    request.selected ? 'Boon.Chat.GearCorrection' : 'Boon.Chat.GearChoice';
+  const actions = request.applied || request.declined ? '' : request.selected ?
+    chatButton('gear-confirm', 'Boon.Chat.GearConfirm', {messageId: request.messageId}) :
+    chatButton('gear-select', 'Boon.Chat.GearSelect', {messageId: request.messageId}) +
+      chatButton('gear-decline', 'Boon.Chat.GearDecline', {messageId: request.messageId});
+  return upsertGMCard({domain: 'boons', id, content: chatSection(
+    `<h3>${localizeHTML('Boon.Chat.GearCheck', {actor: actor?.name ?? t('Common.Actor'), total: request.total ?? t('Common.Unknown')})}</h3>` +
+    `<p>${localizeHTML(status)}</p><div class="bob-toolbar">${actions}</div>`)});
+}
+
+/** Native context options survive PF2e rerolls even though another module's flags do not. */
+export async function captureBoonRoll(message) {
+  if (!isPrimaryGM() || !chatEnabled()) return;
+  const context = message.flags?.pf2e?.context;
+  // PF2e also puts contexts on damage-taken and self-effect cards. Only its native
+  // CheckRoll document evidence, with an evaluated total, authorizes boon actions.
+  if (!context || message.isCheckRoll !== true || !Number.isFinite(message.rolls?.[0]?.total)) return;
+  const actorRef = actorRefForMessage(message);
+  if (!actorRef) return;
+  const marker = Array.from(context.options ?? []).find(option => typeof option === 'string' && option.startsWith('bob-boon:'));
+  if (marker && context.type === 'saving-throw' && degrees.has(context.outcome)) {
+    const id = marker.slice('bob-boon:'.length);
+    const existing = state().requests?.[id];
+    if (existing?.actorId === actorRef && !existing.applied &&
+      (!arrivingMeditationResults.has(id) || context.isReroll === true))
+      arrivingMeditationResults.set(id, {outcome: context.outcome, messageId: message.id});
+    const acceptable = request => request && request.actorId === actorRef && !request.applied && !request.application &&
+      (!request.suggestion || context.isReroll === true && request.suggestion.messageId !== message.id);
+    if (acceptable(state().requests?.[id])) await withAction('boon-chat', async () => {
+      let changed = false;
+      await updateState('boons', draft => {
+        const request = draft.requests?.[id];
+        if (acceptable(request)) {request.suggestion = {outcome: context.outcome, messageId: message.id}; changed = true;}
+      });
+      if (changed) await publishMeditation(id);
+    });
+  }
+  const actor = actorByRef(actorRef);
+  // The source UUID is the native FlatModifier's owned Item, not its label or a matching bonus.
+  const applied = (message.flags?.pf2e?.modifiers ?? []).filter(modifier =>
+    modifier.enabled === true && modifier.ignored !== true && Number.isFinite(modifier.modifier) && modifier.modifier > 0)
+    .map(modifier => Array.from(actor?.items ?? []).find(item => item.uuid === modifier.source))
+    .map(item => flag(item)?.id).filter(Boolean);
+  for (const id of new Set(applied)) {
+    const use = state().uses?.[id];
+    if (use?.kind === 'A14' && use.bonus > 0 && use.actorId === actorRef && alive(use)) {
+      try {await getController().consume({id: `native:${id}:${message.id}`, useId: id, at: now()});}
+      catch (error) {
+        const current = state().uses?.[id];
+        if (current?.status === 'pending') {await publishBoonUse(id); throw error;}
+        if (current?.consumedAt == null) throw error;
+      }
+    }
+  }
+  const gear = Object.values(state().uses ?? {}).find(use => use.kind === 'G4' && use.actorId === actorRef && alive(use));
+  if (!gear || !message.id) return;
+  const id = `gear:${gear.id}`;
+  if (state().gearRequests?.[id]?.messageId === message.id) return;
+  await withAction('boon-chat', async () => {
+    let changed = false;
+    await updateState('boons', draft => {
+      const current = draft.uses?.[gear.id];
+      if (!current || !alive(current) || current.actorId !== actorRef || draft.gearRequests?.[id]?.messageId === message.id) return;
+      (draft.gearRequests ??= {})[id] = {id, useId: gear.id, actorId: actorRef,
+        messageId: message.id, total: message.rolls?.[0]?.total};
+      changed = true;
+    });
+    if (changed) await publishGear(id);
+  });
+}
+
+async function handleBoonCard({action, id, button}) {
+  const messageId = button.dataset.messageId;
+  if (action === 'meditation-roll') return rollMeditationRequest({id});
+  if (action === 'meditation-apply') return applyMeditationResult({id, messageId});
+  if (action === 'meditation-review') return openBoons();
+  if (id.startsWith('use:')) {
+    const useId = id.slice(4), use = state().uses?.[useId];
+    if (!use || use.voided) throw new Error(t('Boon.Error.RecordMissing'));
+    if (!chatEnabled()) throw new Error(t('Boon.Paused'));
+    if (action === 'boon-retry') {await getController().retry(useId); return publishBoonUse(useId);}
+    if (action === 'boon-request') {await recordDialog('request', useId); return publishBoonUse(useId);}
+    if (action === 'boon-resolved') {await getController().resolve(useId, t('Boon.Chat.FollowupConfirmed')); return publishBoonUse(useId);}
+    return;
+  }
+  if (!['gear-select', 'gear-decline', 'gear-confirm'].includes(action)) return;
+  return chooseGearBoon({action, id, messageId});
+}
+
+export async function chooseGearBoon({action, id, messageId}) {
+  return withAction('boon-chat', async () => {
+    if (!chatEnabled()) throw new Error(t('Boon.Paused'));
+    const request = state().gearRequests?.[id], use = state().uses?.[request?.useId];
+    if (!request || request.messageId !== messageId || !use || use.actorId !== request.actorId)
+      throw new Error(t('Boon.Chat.Stale'));
+    if (request.applied || request.declined) return publishGear(id);
+    const operationId = `gear-confirm:${id}:${messageId}`;
+    const retry = action === 'gear-confirm' && state().actions?.[operationId];
+    if (!alive(use) && !retry) throw new Error(t('Boon.Error.Consumed'));
+    if (action === 'gear-confirm') {
+      if (!request.selected) throw new Error(t('Boon.Chat.Stale'));
+      await getController().consume({id: operationId, useId: use.id, at: now()});
+    }
+    await updateState('boons', draft => {
+      const current = draft.gearRequests[id];
+      if (action === 'gear-select') current.selected = true;
+      if (action === 'gear-decline') current.declined = true;
+      if (action === 'gear-confirm') current.applied = true;
+    });
+    return publishGear(id);
+  });
+}
+
 /** The PF2e clock gives local time of day; never infer a dawn from missing data. */
 export function boonBathClock({ at, now: current, environment }) {
   const seconds = environment?.seconds,
@@ -487,17 +728,16 @@ async function requestMeditation() {
   requirePrimaryGM();
   const chosen = await prompt(
     'Boon.WillRoll',
-    actorSelect() + check('cleaned', t('Boon.Cleaned')) + paragraph('Boon.WillRollHelp'),
+    actorSelect() + check('cleaned', t('Boon.Cleaned')) + paragraph('Boon.WillRollHelp') +
+      check('confirmed', t('Boon.ConfirmConditions')),
     'Boon.RollWill'
   );
   if (!chosen) return;
-  const actor = actorByRef(chosen.get('actorId'));
-  if (!actor?.saves?.will?.roll) throw new Error(t('Boon.Error.NoWill'));
-  return actor.saves.will.roll({
-    dc: { value: chosen.get('cleaned') ? 20 : 25 },
-    extraRollOptions: ['action:meditate'],
-    messageMode: 'gm'
-  });
+  confirmed(chosen);
+  const at = now(), id = newId();
+  await requestMeditationWorkflow({id, actorId: chosen.get('actorId'), at, start: at - 3600,
+    cleaned: Boolean(chosen.get('cleaned')), confirmed: true});
+  return rollMeditationRequest({id});
 }
 async function useDialog(kind) {
   requirePrimaryGM();
@@ -507,18 +747,7 @@ async function useDialog(kind) {
   if (kind === 'A14')
     content +=
       paragraph('Boon.A14Help') +
-      check('cleaned', t('Boon.Cleaned')) +
-      select(
-        'degree',
-        t('Boon.WillResult'),
-        [
-          ['criticalSuccess', t('Boon.Degree.CriticalSuccess')],
-          ['success', t('Boon.Degree.Success')],
-          ['failure', t('Boon.Degree.Failure')],
-          ['criticalFailure', t('Boon.Degree.CriticalFailure')]
-        ],
-        'success'
-      );
+      check('cleaned', t('Boon.Cleaned'));
   if (kind === 'A19') content += paragraph('Boon.A19Help') + paragraph('Boon.A19ClockHelp');
   if (kind === 'C45')
     content +=
@@ -545,8 +774,10 @@ async function useDialog(kind) {
   const recordedAt = now(),
     input = { id, kind, actorId: data.get('actorId'), at: recordedAt - ago * 60 };
   if (['A14', 'A19'].includes(kind)) input.start = input.at - 3600;
-  if (kind === 'A14')
-    Object.assign(input, { cleaned: Boolean(data.get('cleaned')), degree: data.get('degree') });
+  if (kind === 'A14') {
+    await requestMeditationWorkflow({...input, cleaned: Boolean(data.get('cleaned')), confirmed: true});
+    return rollMeditationRequest({id});
+  }
   if (kind === 'A19')
     Object.assign(
       input,
@@ -558,6 +789,7 @@ async function useDialog(kind) {
       targets: roomActors(state().binding).map((actor) => actor.uuid)
     });
   await getController().use(input);
+  await publishBoonUse(input.id);
   ui.notifications.info(t('Boon.Recorded'));
 }
 
@@ -904,27 +1136,41 @@ async function recordsDialog() {
 export function registerBoons() {
   if (registered) return;
   registered = true;
+  registerCardActions('boons', handleBoonCard);
+  Hooks.on('createChatMessage', message => {void captureBoonRoll(message).catch(notice);});
   Hooks.once('ready', () => {
     const module = game.modules.get(ID);
     module.api ??= {};
     Object.assign(module.api, {
       openBoons,
-      useBoon: (input) => getController().use(input),
+      useBoon: async (input) => {const result = await getController().use(input); await publishBoonUse(input.id); return result;},
+      requestMeditationWorkflow,
+      rollMeditationRequest,
+      applyMeditationResult,
       consumeBoon: (input) => getController().consume(input),
       transferBoon: (input) => getController().transfer(input),
       correctBoon: (input) => getController().correct(input),
       voidBoon: (input) => getController().void(input),
       retryBoon: (id) => getController().retry(id)
     });
-    if (isPrimaryGM() && enabled() && state().enabled !== false)
-      void getController().tick(now()).catch(notice);
+    if (isPrimaryGM() && chatEnabled()) {
+      void getController().tick(now()).then(async () => {
+        for (const request of Object.values(state().requests ?? {}))
+          if (!request.applied) await publishMeditation(request.id);
+        for (const request of Object.values(state().gearRequests ?? {}))
+          if (!request.applied && !request.declined && alive(state().uses?.[request.useId] ?? {voided: true})) await publishGear(request.id);
+        for (const use of Object.values(state().uses ?? {}))
+          if (!use.voided && (use.status === 'pending' || use.diseasePending || use.cleansePending)) await publishBoonUse(use.id);
+      }).catch(notice);
+    }
   });
   Hooks.on('updateWorldTime', (time) => {
     if (isPrimaryGM() && enabled() && state().enabled !== false)
       void getController().tick(time).catch(notice);
   });
   const sync = (recalculate = false) => {
-    if (isPrimaryGM() && enabled() && state().enabled !== false)
+    // Initial canvasReady precedes game readiness; the ready tick reconciles room holders.
+    if (game.ready && isPrimaryGM() && enabled() && state().enabled !== false)
       void getController()
         .syncRoom(recalculate === true)
         .catch(notice);

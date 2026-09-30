@@ -1,5 +1,15 @@
 # Changes
 
+## 0.4.2
+
+- Handle rest, meditation and hazard checks through GM chat cards.
+- Capture native roll results and rerolls before applying them.
+- Keep pending nightmare consequences and unrevealed effect details out of player displays.
+- Show neutral player labels and descriptions for the adventure's weather presets.
+- Spend meditation bonuses only when the native check uses them.
+- Reserve maintenance panels for setup, corrections and recovery.
+- Reconcile saved hazards and boons after the world is ready.
+
 ## 0.4.1
 
 - Expand compact panel code and break up long HTML templates.

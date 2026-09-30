@@ -73,6 +73,7 @@ async function showAssistants() {
     position: { width: 520 },
     classes: ['bob-companion', 'bob-assistants'],
     content: `
+      <p class="bob-hint">${esc(t('Hub.Hint'))}</p>
       <nav class="bob-tool-list" aria-label="${esc(t('Hub.Title'))}">
         ${entries
           .map(

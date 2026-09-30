@@ -9,9 +9,9 @@ import {
   readState,
   updateState,
   withAction,
-  whisperGM,
   loadEffect
 } from './assistant-core.mjs';
+import { upsertGMCard, registerCardActions } from './chat-cards.mjs';
 import {
   NIGHTMARE_CHAPTERS,
   initializeNightmares,
@@ -20,6 +20,7 @@ import {
   confirmRest,
   cancelRest,
   reserveResult,
+  reserveRecordedResult,
   finishResult,
   pendingFrightened,
   expireNightmares,
@@ -43,6 +44,7 @@ const outcomes = () =>
       t(`Nightmare.Outcome${key[0].toUpperCase()}${key.slice(1)}`)
     ])
   );
+const outcomeHTML = outcome => localizeHTML(`Nightmare.Outcome${outcome[0].toUpperCase()}${outcome.slice(1)}`);
 const actorFor = (id) => {
   const actor = game.actors.get(id);
   if (actor?.type !== 'character') throw new Error(t('Nightmare.ActorMissing'));
@@ -143,21 +145,16 @@ export function buildUneaseData(session) {
 export async function recordNativeRest(event) {
   return withAction(DOMAIN, async () => {
     if (!enabled()) return;
-    const prior = readState(DOMAIN).sessions?.[event.id];
     const state = await updateState(DOMAIN, (draft) => {
       queueRest(draft, event);
     });
-    if (!prior && state.sessions[event.id]) {
-      await whisperGM(
-        `<p>${localizeHTML('Nightmare.RestNotification')}</p><button type="button" data-bob-nightmares>${localizeHTML('Nightmare.OpenAssistant')}</button>`
-      );
-    }
+    if (state.sessions[event.id]) await refreshNightmareCard(event.id);
     return state.sessions[event.id];
   });
 }
 
 export async function confirmNightmareRest({ id, actorIds, chapter, flatTotal }) {
-  return withAction(DOMAIN, async () => {
+  const confirmed = await withAction(DOMAIN, async () => {
     let record = sessionFor(id);
     if (record.status !== 'pending') return record;
     if (!actorIds?.length) throw new Error(t('Nightmare.ConfirmSleeper'));
@@ -181,6 +178,9 @@ export async function confirmNightmareRest({ id, actorIds, chapter, flatTotal })
     });
     return state.sessions[id];
   });
+  await refreshNightmareCard(id);
+  if (confirmed.nightmare) await requestNightmareSaves({ id });
+  return confirmed;
 }
 
 async function ensureEffectDependencies(data) {
@@ -207,11 +207,12 @@ function remainingDuration(data, until) {
   return data;
 }
 
-export async function settleNightmareResult({ id, actorId, outcome }) {
+export async function settleNightmareResult({ id, actorId, outcome, messageId, recorded = false }) {
   return withAction(DOMAIN, async () => {
     const actor = actorFor(actorId);
     let state = await updateState(DOMAIN, (draft) => {
-      reserveResult(draft, { id, actorId, outcome });
+      if (recorded) reserveRecordedResult(draft, { id, actorId, messageId });
+      else reserveResult(draft, { id, actorId, outcome });
     });
     const session = state.sessions[id],
       result = session.results[actorId];
@@ -230,18 +231,11 @@ export async function settleNightmareResult({ id, actorId, outcome }) {
         requirePrimaryGM();
         await actor.createEmbeddedDocuments('Item', [data]);
       }
-      if (['failure', 'criticalFailure'].includes(result.effectiveOutcome)) {
-        const existing = Array.from(actor.items).find(
-          (item) => FLAGS(item).nightmare?.kind === 'unease'
-        );
-        const data = remainingDuration(buildUneaseData(session), result.until);
-        requirePrimaryGM();
-        if (!existing) await actor.createEmbeddedDocuments('Item', [data]);
-        else if (FLAGS(existing).nightmare.sessionId !== id) await existing.update(data);
-      }
     }
     await updateState(DOMAIN, (draft) => {
-      finishResult(draft, { id, actorId });
+      const preexistingConditionIds = Array.from(actor.items)
+        .filter(item => item.type === 'condition' && item.slug === 'frightened' && item.value > 0).map(item => item.id);
+      finishResult(draft, { id, actorId, preexistingConditionIds });
     });
     await expireEffects(now());
     return readState(DOMAIN).sessions[id].results[actorId];
@@ -266,8 +260,8 @@ export async function requestNightmareSave({ id, actorId }) {
     if (existing) return existing;
     return ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<p>${localizeHTML('Nightmare.SaveRequest', { actor: actor.name, dc: session.dc })}</p><button type="button" data-bob-nightmare-roll data-session="${esc(id)}" data-actor="${esc(actorId)}">${localizeHTML('Nightmare.WillSave')}</button>`,
-      flags: { [ID]: { nightmareRequest: { sessionId: id, actorId, dc: session.dc } } }
+      content: `<p>${localizeHTML('Nightmare.NeutralSaveRequest', { actor: actor.name })}</p><button type="button" data-bob-nightmare-roll data-session="${esc(id)}" data-actor="${esc(actorId)}">${localizeHTML('Nightmare.WillSave')}</button>`,
+      flags: { [ID]: { nightmareRequest: { sessionId: id, actorId } } }
     });
   });
 }
@@ -283,7 +277,7 @@ export async function requestNightmareSaves({ id }) {
   return messages;
 }
 
-export async function rollNightmareSave({ id, actorId, dc }) {
+export async function rollNightmareSave({ id, actorId, dc, skipDialog = false }) {
   const actor = actorFor(actorId);
   const session = sessionFor(id);
   if (
@@ -301,7 +295,8 @@ export async function rollNightmareSave({ id, actorId, dc }) {
   rolledSaves.add(key);
   try {
     const result = await actor.saves.will.roll({
-      dc: { value: Number(dc ?? session.dc) },
+      dc: { value: Number(dc ?? session.dc), visible: false },
+      skipDialog,
       label: t('Nightmare.WillSave'),
       extraRollOptions: ['lucid-nightmare', `bob-nightmare:${id}`]
     });
@@ -313,7 +308,121 @@ export async function rollNightmareSave({ id, actorId, dc }) {
   }
 }
 
-export async function consumeNightmareFrightened({ actorId, actionId }) {
+export async function rollNightmareSaves({ id }) {
+  requirePrimaryGM();
+  const record = sessionFor(id);
+  const results = [];
+  for (const actorId of record.actorIds) {
+    const current = sessionFor(id);
+    if (!current.results?.[actorId] && !current.suggestions?.[actorId])
+      results.push(await rollNightmareSave({ id, actorId, skipDialog: true }));
+  }
+  await refreshNightmareCard(id);
+  return results;
+}
+
+/** Snapshot the displayed proposals before queueing any native document mutation. */
+export async function applyNightmareResults({ id, proposals }) {
+  requirePrimaryGM();
+  const record = sessionFor(id);
+  const snapshots = proposals ?? Object.fromEntries(record.actorIds
+    .filter(actorId => record.suggestions?.[actorId] || record.results?.[actorId]?.status === 'applying')
+    .map(actorId => [actorId, record.suggestions?.[actorId]?.messageId ?? record.results[actorId].messageId]));
+  if (!Object.keys(snapshots).length) {
+    if (record.status === 'complete') return [];
+    throw new Error(t('Nightmare.RecordedSaveRequired'));
+  }
+  const results = [];
+  try {
+    for (const [actorId, messageId] of Object.entries(snapshots)) {
+      if (!record.actorIds.includes(actorId)) throw new Error(t('Nightmare.NotSleeper'));
+      results.push(await settleNightmareResult({ id, actorId, messageId, recorded: true }));
+    }
+  } finally {
+    await refreshNightmareCard(id);
+  }
+  return results;
+}
+
+const cardButton = (action, key, values = {}, attributes = '') =>
+  `<button type="button" data-bob-card-action="${esc(action)}" ${attributes}>${localizeHTML(key, values)}</button>`;
+
+export function refreshNightmareCard(id) {
+  const state = readState(DOMAIN), record = sessionFor(id), chapter = officialChapter();
+  const heading = `<h3>${localizeHTML('Nightmare.HomeTitle')}</h3>`;
+  let body;
+  if (record.status === 'pending') {
+    const available = new Map([...partyMembers(), ...record.actorIds.map(actorId => game.actors.get(actorId)).filter(Boolean)]
+      .filter(actor => actor.type === 'character').map(actor => [actor.id, actor]));
+    const sleepers = [...available.values()].map(actor =>
+      `<label class="bob-field"><input type="checkbox" data-bob-nightmare-sleeper value="${esc(actor.id)}" ${record.actorIds.includes(actor.id) ? 'checked' : ''}> ${esc(actor.name)}</label>`).join('');
+    const selection = chapter ? `<p>${localizeHTML('Nightmare.CurrentChapter', { chapter })}</p>` :
+      `<label>${localizeHTML('Nightmare.ChapterUnavailable')} <select data-bob-nightmare-chapter>${Object.keys(NIGHTMARE_CHAPTERS)
+        .map(value => `<option value="${value}" data-bob-i18n="BOB.Nightmare.Chapter" data-bob-values="${esc(JSON.stringify({ chapter: value }))}">${esc(t('Nightmare.Chapter', { chapter: value }))}</option>`).join('')}</select></label>`;
+    body = `<p>${localizeHTML('Nightmare.RestNotification')}</p><p>${localizeHTML('Nightmare.RecordedAt', { time: readableTime(record.at) })}</p>${selection}` +
+      (state.initialized ? `<p>${localizeHTML('Nightmare.ConfirmSleepHint')}</p>${sleepers}<div class="bob-toolbar">${cardButton('confirm', 'Nightmare.ConfirmSleep')}${cardButton('ignore', 'Nightmare.NotApplicable')}</div>` :
+        `<p>${localizeHTML('Nightmare.SetupNeeded')}</p>${cardButton('setup', 'Nightmare.Setup')}`);
+  } else if (record.status === 'canceled') {
+    body = `<p>${localizeHTML('Nightmare.RestCanceled')}</p>`;
+  } else if (!record.nightmare) {
+    body = `<p>${localizeHTML('Nightmare.NoNightmare')}</p>`;
+  } else {
+    const unresolved = record.actorIds.filter(actorId => !record.results?.[actorId] && !record.suggestions?.[actorId]);
+    const proposals = {};
+    const rows = record.actorIds.map(actorId => {
+      const result = record.results?.[actorId], suggestion = record.suggestions?.[actorId];
+      let detail;
+      if (result?.status === 'complete') {
+        detail = `${localizeHTML('Nightmare.Settled', { outcome: '' })} ${outcomeHTML(result.effectiveOutcome)}`;
+        if (result.applyPhobia) detail += ` · ${localizeHTML('Nightmare.PhobiaRecorded')}`;
+        if (result.lucidResearch) detail += ` · ${localizeHTML('Nightmare.LucidResearchRecorded')}`;
+      } else if (result) {
+        proposals[actorId] = result.messageId ?? suggestion?.messageId ?? null;
+        detail = localizeHTML('Nightmare.RetryResult');
+      } else if (suggestion) {
+        proposals[actorId] = suggestion.messageId;
+        detail = `${localizeHTML('Nightmare.SuggestedOutcome', { outcome: '' })} ${outcomeHTML(suggestion.outcome)}`;
+      } else detail = localizeHTML('Nightmare.AwaitingSave');
+      return `<li class="bob-record"><div><strong>${esc(game.actors.get(actorId)?.name ?? actorId)}</strong><p>${detail}</p></div></li>`;
+    }).join('');
+    const actions = (unresolved.length ? `${cardButton('request', 'Nightmare.RequestAllSaves', { count: unresolved.length })}${cardButton('roll', 'Nightmare.RollRemaining', { count: unresolved.length })}` : '') +
+      (Object.keys(proposals).length ? cardButton('apply', 'Nightmare.ApplyRecorded', { count: Object.keys(proposals).length }, `data-proposals="${esc(JSON.stringify(proposals))}"`) : '');
+    body = `<p>${localizeHTML('Nightmare.ResultsSummary', { chapter: record.chapter, dc: record.dc, time: readableTime(record.at) })}</p><ul class="bob-record-list">${rows}</ul>${actions ? `<div class="bob-toolbar">${actions}</div>` : ''}`;
+  }
+  return upsertGMCard({ domain: DOMAIN, id, content: `<section class="bob-companion bob-chat-card" data-bob-nightmare-card>${heading}${body}</section>` });
+}
+
+async function handleNightmareCard({ action, id, button }) {
+  requirePrimaryGM();
+  if (action === 'setup') await setupNightmares();
+  else if (action === 'confirm') {
+    const scope = button.closest('[data-bob-nightmare-card]');
+    const actorIds = Array.from(scope?.querySelectorAll('[data-bob-nightmare-sleeper]:checked') ?? [], input => input.value);
+    await confirmNightmareRest({ id, actorIds, chapter: Number(scope?.querySelector('[data-bob-nightmare-chapter]')?.value) });
+  } else if (action === 'ignore') {
+    await withAction(DOMAIN, () => updateState(DOMAIN, state => cancelRest(state, id)));
+  } else if (action === 'request') await requestNightmareSaves({ id });
+  else if (action === 'roll') await rollNightmareSaves({ id });
+  else if (action === 'apply') await applyNightmareResults({ id, proposals: JSON.parse(button.dataset.proposals ?? '{}') });
+  await refreshNightmareCard(id);
+}
+
+/** Remove only module-owned legacy markers; the GM ledger remains authoritative. */
+export async function migrateNightmareUnease() {
+  return withAction(DOMAIN, async () => {
+    for (const actor of Array.from(game.actors?.contents ?? game.actors?.values?.() ?? [])) {
+      const ids = Array.from(actor.items ?? [])
+        .filter((item) => FLAGS(item).nightmare?.kind === 'unease')
+        .map((item) => item.id);
+      if (ids.length) {
+        requirePrimaryGM();
+        await actor.deleteEmbeddedDocuments('Item', ids);
+      }
+    }
+  });
+}
+
+export async function consumeNightmareFrightened({ actorId, actionId, proposal }) {
   return withAction(DOMAIN, async () => {
     const actor = actorFor(actorId),
       prior = readState(DOMAIN).characters?.[actorId]?.frightenedAction;
@@ -321,8 +430,16 @@ export async function consumeNightmareFrightened({ actorId, actionId }) {
     let condition =
       prior?.id === actionId
         ? actor.items.get(prior.conditionId)
-        : actor.getCondition('frightened');
+        : proposal ? actor.items.get(proposal.conditionId) : actor.getCondition('frightened');
     let state = await updateState(DOMAIN, (draft) => {
+      if (proposal && prior?.id !== actionId) {
+        const current = draft.characters?.[actorId]?.frightenedProposal;
+        const pending = pendingFrightened(draft, actorId, now());
+        if (!pending || pending.sessionId !== proposal.sessionId || current?.sessionId !== proposal.sessionId ||
+          current.conditionId !== proposal.conditionId || current.value !== proposal.value || condition?.value !== proposal.value ||
+          condition?.active === false || condition?.slug !== 'frightened' || actor.getCondition('frightened')?.id !== proposal.conditionId)
+          throw new Error(t('Nightmare.ProposalChanged'));
+      }
       reserveFrightened(draft, {
         actorId,
         actionId,
@@ -358,9 +475,134 @@ export async function consumeNightmareFrightened({ actorId, actionId }) {
     }
     state = await updateState(DOMAIN, (draft) => {
       finishFrightened(draft, { actorId, actionId, at: now() });
+      const current = draft.characters?.[actorId]?.frightenedProposal;
+      if (current?.sessionId === action.sessionId && current.conditionId === action.conditionId) current.status = 'complete';
     });
+    if (state.characters[actorId].frightenedProposal) await refreshNightmareFearCard(actorId);
     return state.characters[actorId].frightenedAction;
   });
+}
+
+/** A new native condition is evidence of acquisition; a numeric edit is not. */
+export async function recordNightmareFrightened({ actorId, conditionId }) {
+  return withAction(DOMAIN, async () => {
+    if (!enabled()) return;
+    const actor = actorFor(actorId), condition = actor.items.get(conditionId);
+    const pending = pendingFrightened(readState(DOMAIN), actorId, now());
+    if (!pending || pending.preexistingConditionIds?.includes(conditionId) || condition?.type !== 'condition' || condition.slug !== 'frightened' ||
+      condition.active === false || !Number.isInteger(condition.value) || condition.value < 1) return;
+    // A newly created duplicate/overriding condition does not prove the actor was unfrightened.
+    if (Array.from(actor.items).some(item => item.id !== conditionId && item.type === 'condition' && item.slug === 'frightened' && item.value > 0)) return;
+    const state = await updateState(DOMAIN, draft => {
+      const pc = draft.characters[actorId], current = pc.frightenedProposal;
+      if (pendingFrightened(draft, actorId, now())?.sessionId !== pending.sessionId) return;
+      if (current?.sessionId === pending.sessionId) return;
+      pc.frightenedProposal = { sessionId: pending.sessionId, conditionId, value: condition.value, at: now(), status: 'pending' };
+    });
+    await refreshNightmareFearCard(actorId);
+    return state.characters[actorId].frightenedProposal;
+  });
+}
+
+const sameFearSource = (left, right) => left?.sessionId === right?.sessionId && left?.conditionId === right?.conditionId;
+function activeFrightenedSource(actor, proposal) {
+  const condition = actor?.items.get(proposal.conditionId);
+  return condition?.type === 'condition' && condition.slug === 'frightened' && condition.active !== false &&
+    Number.isInteger(condition.value) && condition.value > 0 && actor.getCondition('frightened')?.id === condition.id ? condition : null;
+}
+
+/** A GM acknowledges a changed value of the same acquired condition, without creating a new gain. */
+export async function reviewNightmareFrightenedValue({ actorId, proposal, value }) {
+  return withAction(DOMAIN, async () => {
+    const actor = actorFor(actorId);
+    const state = await updateState(DOMAIN, draft => {
+      const pc = draft.characters?.[actorId], current = pc?.frightenedProposal;
+      if (!current || !sameFearSource(current, proposal)) throw new Error(t('Nightmare.ProposalChanged'));
+      if (current.status === 'complete' || pc.frightenedAction?.status === 'complete' && pc.frightenedAction.sessionId === current.sessionId) return;
+      // An interrupted native write has a fixed target. Rebasing it could apply +1 twice.
+      if (pc.frightenedAction?.status === 'applying') throw new Error(t('Nightmare.RecoverFrightened'));
+      if (pendingFrightened(draft, actorId, now())?.sessionId !== current.sessionId) throw new Error(t('Nightmare.NoPendingFrightened'));
+      const condition = activeFrightenedSource(actor, current);
+      if (!condition || condition.value !== value) throw new Error(t('Nightmare.ProposalChanged'));
+      if (current.value === value && current.reviewedFrom === proposal.value) return;
+      if (current.value !== proposal.value) throw new Error(t('Nightmare.ProposalChanged'));
+      if (current.value !== value) Object.assign(current, { reviewedFrom: current.value, value, reviewedAt: now() });
+    });
+    await refreshNightmareFearCard(actorId);
+    return state.characters[actorId].frightenedProposal;
+  });
+}
+
+/** Explicitly close a gain already handled by the GM, retaining any interrupted operation receipt. */
+export async function acknowledgeNightmareFrightened({ actorId, proposal }) {
+  return withAction(DOMAIN, async () => {
+    const state = await updateState(DOMAIN, draft => {
+      const pc = draft.characters?.[actorId], current = pc?.frightenedProposal;
+      if (!current || !sameFearSource(current, proposal)) throw new Error(t('Nightmare.ProposalChanged'));
+      if (current.status === 'complete') return;
+      if (current.value !== proposal.value) throw new Error(t('Nightmare.ProposalChanged'));
+      const action = pc.frightenedAction;
+      if (action?.status === 'applying' && action.sessionId !== current.sessionId) throw new Error(t('Nightmare.RecoverFrightened'));
+      if (action?.status === 'applying') {
+        finishFrightened(draft, { actorId, actionId: action.id, at: now() });
+        action.recovery = 'confirmed-handled';
+      } else {
+        if (pc.pending?.sessionId !== current.sessionId || !pc.pending.consumed && !pendingFrightened(draft, actorId, now()))
+          throw new Error(t('Nightmare.NoPendingFrightened'));
+        Object.assign(pc.pending, { consumed: true, consumedAt: now(), corrected: true });
+      }
+      Object.assign(current, { status: 'complete', resolution: 'confirmed-handled', handledAt: now() });
+    });
+    await refreshNightmareFearCard(actorId);
+    return state.characters[actorId].frightenedProposal;
+  });
+}
+
+export function refreshNightmareFearCard(actorId) {
+  const state = readState(DOMAIN), pc = state.characters?.[actorId], proposal = pc?.frightenedProposal;
+  if (!proposal) return;
+  const actor = game.actors.get(actorId), pending = pendingFrightened(state, actorId, now());
+  const action = pc.frightenedAction;
+  const recovering = action?.status === 'applying' && action.sessionId === proposal.sessionId;
+  const complete = proposal.status === 'complete' || pc.frightenedAction?.status === 'complete' && pc.frightenedAction.sessionId === proposal.sessionId;
+  const applicable = pending?.sessionId === proposal.sessionId;
+  const condition = activeFrightenedSource(actor, proposal);
+  const original = actor?.items.get(proposal.conditionId);
+  const attributes = `data-actor="${esc(actorId)}" data-proposal="${esc(JSON.stringify(proposal))}"`;
+  const handled = () => cardButton('confirm-handled', 'Nightmare.ConfirmFearHandled', {}, attributes);
+  let body;
+  if (complete) body = `<p>${localizeHTML(proposal.resolution === 'confirmed-handled' ? 'Nightmare.FearHandled' : 'Nightmare.FearCardApplied')}</p>`;
+  else if (!applicable && !recovering) body = `<p>${localizeHTML('Nightmare.NoPendingFrightened')}</p>`;
+  else if (recovering) {
+    const written = FLAGS(original).nightmareFrightened?.actionId === action.id;
+    const retryable = original?.slug === 'frightened' && (written || condition && condition.value === action.before);
+    body = `<p>${localizeHTML('Nightmare.FearReceiptRecovery')}</p>` +
+      (!condition && !written ? `<p>${localizeHTML('Nightmare.FearConditionMissing')}</p>` :
+        !written && condition.value !== action.before ? `<p>${localizeHTML('Nightmare.FearValueChanged', { before: action.before, value: condition.value })}</p>` : '') +
+      `<div class="bob-toolbar">${retryable ? cardButton('apply', 'Nightmare.RetryFear', {}, attributes) : ''}${handled()}</div>`;
+  } else if (!condition) {
+    body = `<p>${localizeHTML('Nightmare.FearConditionMissing')}</p>${handled()}`;
+  } else if (condition.value !== proposal.value) {
+    body = `<p>${localizeHTML('Nightmare.FearValueChanged', { before: proposal.value, value: condition.value })}</p>` +
+      cardButton('use-current', 'Nightmare.UseCurrentFear', {}, `${attributes} data-current-value="${condition.value}"`);
+  } else {
+    body = `<p>${localizeHTML('Nightmare.FearCardHint', { actor: actor?.name ?? actorId, value: proposal.value })}</p>` +
+      cardButton('apply', 'Nightmare.ApplyFirstFear', {}, attributes);
+  }
+  const content = `<section class="bob-companion bob-chat-card"><h3>${localizeHTML('Nightmare.FearCardTitle')}</h3>${body}</section>`;
+  return upsertGMCard({ domain: 'nightmare-frightened', id: actorId, content });
+}
+
+async function handleNightmareFearCard({ action, id, button }) {
+  requirePrimaryGM();
+  const proposal = JSON.parse(button.dataset.proposal ?? '{}');
+  try {
+    if (action === 'apply') await consumeNightmareFrightened({ actorId: id, actionId: `fear-${proposal.sessionId}-${proposal.conditionId}`, proposal });
+    else if (action === 'use-current') await reviewNightmareFrightenedValue({ actorId: id, proposal, value: Number(button.dataset.currentValue) });
+    else if (action === 'confirm-handled') await acknowledgeNightmareFrightened({ actorId: id, proposal });
+  } finally {
+    await refreshNightmareFearCard(id);
+  }
 }
 
 function needsExpiry(state, at) {
@@ -405,6 +647,9 @@ async function expireEffects(at) {
   await updateState(DOMAIN, (draft) => {
     expireNightmares(draft, at);
   });
+  for (const [actorId, pc] of Object.entries(readState(DOMAIN).characters ?? {})) {
+    if (pc.frightenedProposal && pc.pending?.expired) await refreshNightmareFearCard(actorId);
+  }
 }
 
 function getForm(dialog) {
@@ -897,11 +1142,14 @@ async function captureSave(message) {
     if (canRecord(current))
       (current.suggestions ??= {})[actorId] = { outcome: context.outcome, messageId: message.id };
   });
+  await refreshNightmareCard(id);
 }
 
 export function registerNightmares() {
   if (registered) return;
   registered = true;
+  registerCardActions(DOMAIN, handleNightmareCard);
+  registerCardActions('nightmare-frightened', handleNightmareFearCard);
   // The local rest hook has no transaction ID. Its completed native chat batch is authoritative
   // and travels to the GM even when a player invoked Party rest.
   Hooks.on('preCreateChatMessage', (message, _data, options) => {
@@ -917,6 +1165,19 @@ export function registerNightmares() {
     queueNativeMessage(message, options);
     void captureSave(message).catch(fail);
   });
+  Hooks.on('createItem', item => {
+    if (!isPrimaryGM() || !enabled() || item.type !== 'condition' || item.slug !== 'frightened' || item.parent?.type !== 'character') return;
+    void recordNightmareFrightened({ actorId: item.parent.id, conditionId: item.id }).catch(fail);
+  });
+  const refreshTrackedFear = item => {
+    if (!isPrimaryGM() || !enabled() || item.parent?.type !== 'character') return;
+    const pc = readState(DOMAIN).characters?.[item.parent.id];
+    if (pc?.frightenedProposal?.conditionId !== item.id || pc.frightenedProposal.status === 'complete') return;
+    // Refresh only the existing proposal's presentation; edits never create a new acquisition.
+    void refreshNightmareFearCard(item.parent.id).catch(fail);
+  };
+  Hooks.on('updateItem', refreshTrackedFear);
+  Hooks.on('deleteItem', refreshTrackedFear);
   Hooks.on('renderChatMessageHTML', (message, element) => {
     element.querySelectorAll('[data-bob-nightmares]').forEach((button) => {
       if (!game.user.isGM) {
@@ -928,7 +1189,14 @@ export function registerNightmares() {
     element.querySelectorAll('[data-bob-nightmare-roll]').forEach((button) => {
       const request = FLAGS(message).nightmareRequest;
       const actor = game.actors.get(request?.actorId);
-      if (!request || (!game.user.isGM && !actor?.isOwner)) {
+      if (request) {
+        button.innerHTML = localizeHTML('Nightmare.WillSave');
+        // Old module requests saved their DC in plain text; render the neutral request per viewer.
+        const paragraph = button.previousElementSibling;
+        if (!game.user.isGM && paragraph?.tagName === 'P')
+          paragraph.innerHTML = localizeHTML('Nightmare.NeutralSaveRequest', { actor: actor?.name ?? t('Common.Actor') });
+      }
+      if (!request || !actor || (!game.user.isGM && !actor.isOwner)) {
         button.disabled = true;
         return;
       }
@@ -961,8 +1229,23 @@ export function registerNightmares() {
       confirmNightmareRest,
       settleNightmareResult,
       requestNightmareSave,
-      consumeNightmareFrightened
+      consumeNightmareFrightened,
+      refreshNightmareCard,
+      rollNightmareSaves,
+      applyNightmareResults,
+      refreshNightmareFearCard,
+      reviewNightmareFrightenedValue,
+      acknowledgeNightmareFrightened
     });
-    if (isPrimaryGM()) void expireNightmareEffects().catch(fail);
+    if (isPrimaryGM()) void (async () => {
+      await migrateNightmareUnease();
+      await expireNightmareEffects();
+      if (!enabled()) return;
+      for (const message of Array.from(game.messages ?? [])) await captureSave(message);
+      for (const session of Object.values(readState(DOMAIN).sessions ?? {}))
+        if (['pending', 'awaiting-results'].includes(session.status)) await refreshNightmareCard(session.id);
+      for (const [actorId, pc] of Object.entries(readState(DOMAIN).characters ?? {}))
+        if (pc.frightenedProposal?.status === 'pending' || pc.frightenedAction?.status === 'applying') await refreshNightmareFearCard(actorId);
+    })().catch(fail);
   });
 }

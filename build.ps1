@@ -11,7 +11,7 @@ $requiredFiles = @(
   'lang/en.json', 'lang/zh-cn.json', 'scripts/i18n.mjs',
   'scripts/main.mjs', 'scripts/runtime.mjs', 'scripts/ui.mjs', 'scripts/ui-state.mjs',
   'scripts/model.mjs', 'scripts/context.mjs', 'scripts/calendar.mjs', 'scripts/weather.mjs',
-  'scripts/assistant-core.mjs', 'scripts/assistants.mjs',
+  'scripts/assistant-core.mjs', 'scripts/assistants.mjs', 'scripts/chat-cards.mjs',
   'scripts/nightmare-model.mjs', 'scripts/nightmares.mjs',
   'scripts/boon-model.mjs', 'scripts/boons.mjs',
   'scripts/hazard-model.mjs', 'scripts/hazards.mjs',

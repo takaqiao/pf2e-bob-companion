@@ -31,7 +31,30 @@
           "performance": "This is a rank 6 Sure Footing with a +17 counteract modifier. Check the <a class=\"content-link\" data-uuid=\"{source}\">native blessing entry</a> and resolve the applicable effects."
         },
         "Targets": "Targets in the room when used: {targets}",
-        "TargetsMissing": "No targets were recorded. GM must confirm who was present"
+        "TargetsMissing": "No targets were recorded. GM must confirm who was present",
+        "Meditation": "Meditation — {actor}",
+        "Captured": "Recorded result: {outcome}",
+        "AwaitSave": "Roll the Will save, then apply the recorded result",
+        "Applied": "Applied",
+        "Apply": "Apply recorded result",
+        "NoPendingSave": "No meditation save is awaiting a roll",
+        "Stale": "The result changed. Use the updated chat card",
+        "Granted": "{actor}: {boon}",
+        "Followup": "Resolve the native disease or counteract effect, then confirm below",
+        "ConfirmFollowup": "Confirm follow-up handled",
+        "FollowupConfirmed": "Follow-up confirmed by GM",
+        "GearAvailable": "Available for one check. Native checks offer a use choice in GM chat",
+        "GearCheck": "{actor}: foretelling boon · check total {total}",
+        "GearChoice": "Use the +2 status bonus for this check?",
+        "GearSelect": "Use for this check",
+        "GearDecline": "Keep the boon",
+        "GearDeclined": "Boon kept",
+        "GearCorrection": "Apply the +2 status bonus to the native check under stacking and degree-of-success rules, then confirm. This card has not changed the roll",
+        "GearConfirm": "Confirm corrected result and spend boon",
+        "GearSpent": "Use recorded; GM confirmed the result correction",
+        "RerollDuringApply": "A reroll arrived during application. The reserved result was kept; review the record before continuing",
+        "ReviewResult": "Review result in maintenance",
+        "Resolution": "Effect: {outcome}"
       },
       "ChooseRecord": "Choose a record",
       "Cleaned": "Standing stone cleaned",
@@ -281,8 +304,15 @@
       "Records": "Adventure records",
       "Save": "Save",
       "SyncUpdate": "Record updates must be synchronous",
-      "Title": "BoB | Adventure tools",
-      "Unknown": "Unknown"
+      "Title": "BoB",
+      "Unknown": "Unknown",
+      "CurrentEffectName": "Current effect",
+      "CurrentEffectDescription": "<p>Current adjustments are included in your character’s statistics.</p>",
+      "CurrentModifier": "Current modifier",
+      "CurrentHPName": "Maximum HP bonus",
+      "CurrentHPDescription": "<p>Maximum HP increases by {value}.</p>",
+      "CurrentTempHPName": "Temporary HP",
+      "CurrentTempHPDescription": "<p>Temporary HP: {value}.</p>"
     },
     "Environment": {
       "ActorType": "Only characters and NPCs are supported",
@@ -343,7 +373,7 @@
       "NoAir": "No pending saves",
       "NoFortitude": "The actor is missing or cannot attempt a Fortitude save",
       "NoLightning": "No pending checks",
-      "PendingChat": "Pending hazard checks in Adventure tools",
+      "PendingChat": "Pending hazard checks in GM chat",
       "Region": "Region",
       "Roll": "Roll Fortitude",
       "RollLightning": "Roll lightning check",
@@ -353,21 +383,34 @@
       "TimerHint": "Foul air immunity ends after more than 8 hours continuously outside the dungeon. Foul air regions also count as dungeon; bind the remaining dungeon areas too. Tower checks occur every 10 minutes of party exposure and pause when everyone leaves",
       "Tower": "Tower outdoors",
       "Unbind": "Remove binding",
-      "Use": "Use"
+      "Use": "Use",
+      "Chat": {
+        "Paused": "Hazard automation is paused",
+        "Stale": "The exposure or result changed. Use the updated chat card",
+        "RollPending": "This exposure already has a save in progress",
+        "Captured": "Recorded result: {outcome}",
+        "Air": "Foul air — {actor}",
+        "Apply": "Apply immunity",
+        "Handled": "Handled",
+        "FailureHelp": "Handle the native failure consequences before closing this exposure. No immunity is granted",
+        "ConfirmConsequences": "Confirm consequences handled",
+        "Unexposed": "Confirm actor was unexposed",
+        "Consequences": "Confirm the native failure consequences before closing this exposure"
+      }
     },
     "Hub": {
       "Boons": "Boons",
       "Hazards": "Hazards",
-      "Hint": "Rest, boons, hazards and soulhearts",
+      "Hint": "Routine checks use chat cards. Use these tools for setup, corrections and recovery",
       "InstallMacros": "Create or update macros",
       "MacrosReady": "Macros are ready. Drag them from the macro directory to the hotbar",
-      "Menu": "BoB adventure tools",
+      "Menu": "BoB maintenance",
       "NotReady": "Tool unavailable; reload to try again",
-      "Open": "Open adventure tools",
+      "Open": "Open maintenance tools",
       "Rest": "Rest and nightmares",
       "Shortcuts": "Macros",
       "Soulhearts": "Soulhearts",
-      "Title": "Adventure tools",
+      "Title": "Maintenance tools",
       "UseSoulheart": "Use soulheart"
     },
     "Nightmare": {
@@ -481,7 +524,7 @@
       "SaveAlreadyRolled": "A Will save was already rolled for this rest",
       "SaveCorrection": "Save correction",
       "SaveNotOwned": "You can roll only for a character you control",
-      "SaveRequest": "{actor}: make the current Will save (DC {dc})",
+      "SaveRequest": "{actor}: make a Will save",
       "SaveSetup": "Save setup",
       "Settled": "Resolved: {outcome}",
       "Setup": "Set up",
@@ -493,7 +536,22 @@
       "UneaseName": "Uneasy after the dream",
       "UnknownTime": "Unknown time",
       "WillSave": "Will save",
-      "SaveOutcome": "Save result"
+      "SaveOutcome": "Save result",
+      "NeutralSaveRequest": "{actor}: make a Will save",
+      "RollRemaining": "Roll remaining saves ({count})",
+      "ApplyRecorded": "Apply recorded results ({count})",
+      "RecordedSaveRequired": "Complete a native save before applying its result",
+      "ProposalChanged": "The roll changed. Review the updated card before applying",
+      "FearCardTitle": "New frightened condition",
+      "FearCardHint": "{actor} gained frightened {value}. Confirm this is the first new gain, then apply +1",
+      "FearCardApplied": "Frightened increase applied",
+      "RestCanceled": "This rest does not apply",
+      "FearValueChanged": "Recorded frightened {before}; current value {value}. Review this change before applying",
+      "UseCurrentFear": "Use current frightened value",
+      "FearConditionMissing": "The recorded condition was removed or replaced. Confirm whether the prior gain has already been handled",
+      "ConfirmFearHandled": "Confirm prior gain already handled",
+      "FearHandled": "Prior frightened gain marked handled by GM",
+      "FearReceiptRecovery": "An interrupted adjustment has a receipt. Retry its original action or confirm the prior gain has already been handled"
     },
     "Rule": {
       "Attack": "Attack roll",
@@ -601,7 +659,7 @@
       "ActorToEdit": "Actor",
       "ActualExposure": "Shelter",
       "Advanced": "Advanced",
-      "AdventureTools": "Adventure tools",
+      "AdventureTools": "Maintenance tools",
       "Automatic": "Automatic",
       "CalendarControls": "Calendar controls",
       "CalendarDisconnected": "Calendar not connected",
@@ -772,7 +830,36 @@
       "SevereCold": "Severe cold",
       "Snow": "Brief snowfall",
       "StormEnded": "The storm has ended. Set the current weather manually",
-      "SunnyBreak": "Sunny break"
+      "SunnyBreak": "Sunny break",
+      "Display": {
+        "ColdDrizzle": {
+          "Label": "Cold drizzle",
+          "Description": "Cold air with light rain."
+        },
+        "ColdRain": {
+          "Label": "Cold rain",
+          "Description": "Cold air with steady rain."
+        },
+        "ColdOvercast": {
+          "Label": "Cold overcast",
+          "Description": "Cold air under overcast skies."
+        },
+        "ColdThunderstorm": {
+          "Label": "Cold thunderstorm",
+          "Description": "Cold air, rain, and thunder."
+        },
+        "SevereThunderstorm": {
+          "Label": "Severe thunderstorm",
+          "Description": "Heavy rain, strong wind, and thunder."
+        },
+        "ColdSnow": {
+          "Label": "Cold snowfall",
+          "Description": "Snow is falling in cold air."
+        }
+      }
+    },
+    "Chat": {
+      "ActionFailed": "Unable to complete this action"
     }
   }
 }

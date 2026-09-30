@@ -472,3 +472,39 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Chat is the ordinary workflow; keep cards legible in the narrow sidebar. */
+.bob-chat-card {
+  max-width: 100%;
+  font-size: inherit;
+  line-height: 1.5;
+}
+.bob-chat-card :is(h2, h3) {
+  font-size: 1em;
+  margin: 0 0 0.5rem;
+}
+.bob-chat-card :is(.bob-toolbar, .bob-record) {
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.bob-chat-card :is(.bob-record, .bob-field) {
+  align-items: center;
+}
+.bob-chat-card .bob-record > div {
+  flex-basis: 100%;
+}
+.bob-chat-card button {
+  width: auto;
+  min-height: 2rem;
+  padding: 0.3rem 0.55rem;
+  flex: 1 1 auto;
+}
+.bob-chat-card :is(p, label, li) {
+  margin-block: 0.35rem;
+}
+.bob-chat-card ul {
+  padding-left: 1.2rem;
+}
+.bob-chat-card .bob-check-list {
+  gap: 0.2rem;
+}

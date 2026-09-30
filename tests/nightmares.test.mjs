@@ -8,6 +8,8 @@ import {
 import {buildPhobiaData, buildUneaseData, settleNightmareResult, consumeNightmareFrightened,
   recordNativeRest, requestNightmareSave, requestNightmareSaves, rollNightmareSave, expireNightmareEffects, registerNightmares} from '../scripts/nightmares.mjs';
 import {translateItem} from '../scripts/i18n.mjs';
+import * as nightmareRuntime from '../scripts/nightmares.mjs';
+import * as nightmareLedger from '../scripts/nightmare-model.mjs';
 
 const fresh = (handled = false) => {
   const state = {};
@@ -191,13 +193,14 @@ function nativeFixture() {
   items.get = id => items.find(i => i.id === id);
   const users = [{id: 'gm', isGM: true, active: true}]; users.activeGM = users[0];
   const second = {id: 'b', type: 'character', name: 'Second PC', items: []};
-  globalThis.game = {user: users[0], users, actors: {get: id => ({a: actor, b: second})[id]}, time: {worldTime: 100}, settings: {
+  globalThis.game = {user: users[0], users, actors: new Map([['a', actor], ['b', second]]), time: {worldTime: 100}, settings: {
     get: () => structuredClone(root), set: async (_id, _key, value) => {root = structuredClone(value);}
   }, messages: []};
   const hooks = {};
   globalThis.Hooks = {on: (name, handler) => {(hooks[name] ??= []).push(handler);}, once: (name, handler) => {(hooks[name] ??= []).push(handler);}, callAll() {}};
   globalThis.fromUuid = async () => ({type: 'effect', toObject: () => ({name: 'Effect: Thalassophobia', type: 'effect', system: {rules: [], description: {value: ''}}})});
-  globalThis.ChatMessage = {create: async data => {const message = {...data, id: `m${game.messages.length}`}; game.messages.push(message); return message;}, getSpeaker: ({actor}) => ({actor: actor.id})};
+  game.messages.get = id => game.messages.find(message => message.id === id);
+  globalThis.ChatMessage = {create: async data => {const message = {...data, id: `m${game.messages.length}`, update: async change => {Object.assign(message, change); return message;}}; game.messages.push(message); return message;}, getSpeaker: ({actor}) => ({actor: actor.id})};
   return {actor, hooks, state: () => root.nightmares, seed: fn => fn(root.nightmares)};
 }
 
@@ -240,6 +243,47 @@ test('save requests are genuine PF2e checks, are idempotent, and reveal no chapt
   assert.match(game.messages[0].content, /BOB\.Nightmare\.WillSave/);
   assert.equal(game.messages[0].content.includes('深水恐惧'), false);
   assert.equal(game.messages[0].flags['pf2e-bob-companion'].nightmareRequest.actorId, 'a');
+  assert.equal(game.messages[0].flags['pf2e-bob-companion'].nightmareRequest.dc, undefined);
+  assert.equal(game.messages[0].content.includes('data-bob-values="{&quot;actor&quot;:&quot;PC&quot;,&quot;dc&quot;:'), false);
+});
+
+test('failure records pending frightened privately without creating any visible actor marker', async () => {
+  const fixture = nativeFixture(); fixture.seed(s => rest(s, 'private-failure'));
+  await settleNightmareResult({id: 'private-failure', actorId: 'a', outcome: 'failure'});
+  assert.equal(fixture.actor.items.length, 0);
+  assert.equal(fixture.state().characters.a.pending.sessionId, 'private-failure');
+});
+
+test('frightened already present at settlement cannot become a new-acquisition proposal', async () => {
+  const fixture = nativeFixture(); fixture.seed(s => rest(s, 'existing-fright'));
+  fixture.actor.items.push({id: 'existing-fear', type: 'condition', slug: 'frightened', value: 1, flags: {}});
+  await settleNightmareResult({id: 'existing-fright', actorId: 'a', outcome: 'failure'});
+  assert.deepEqual(fixture.state().characters.a.pending.preexistingConditionIds, ['existing-fear']);
+  await nightmareRuntime.recordNightmareFrightened({actorId: 'a', conditionId: 'existing-fear'});
+  assert.equal(fixture.state().characters.a.frightenedProposal, undefined);
+  assert.equal(game.messages.length, 0);
+});
+
+test('daily settlement requires a captured save and rejects a reroll that changed the proposed snapshot', () => {
+  const state = fresh(); rest(state, 'recorded-only');
+  assert.equal(typeof nightmareLedger.reserveRecordedResult, 'function');
+  assert.throws(() => nightmareLedger.reserveRecordedResult(state, {id: 'recorded-only', actorId: 'a', messageId: 'old'}), /RecordedSaveRequired/);
+  state.sessions['recorded-only'].suggestions = {a: {outcome: 'criticalFailure', messageId: 'first'}};
+  state.sessions['recorded-only'].suggestions.a = {outcome: 'success', messageId: 'reroll'};
+  assert.throws(() => nightmareLedger.reserveRecordedResult(state, {id: 'recorded-only', actorId: 'a', messageId: 'first'}), /ProposalChanged/);
+  assert.equal(state.sessions['recorded-only'].results.a, undefined);
+  assert.equal(nightmareLedger.reserveRecordedResult(state, {id: 'recorded-only', actorId: 'a', messageId: 'reroll'}).outcome, 'success');
+});
+
+test('legacy unease migration removes only marked items while preserving the pending ledger', async () => {
+  const fixture = nativeFixture(); fixture.seed(s => {rest(s, 'legacy'); reserveResult(s, {id: 'legacy', actorId: 'a', outcome: 'failure'}); finishResult(s, {id: 'legacy', actorId: 'a'});});
+  fixture.actor.items.push({id: 'legacy-marker', flags: {'pf2e-bob-companion': {nightmare: {kind: 'unease', sessionId: 'legacy'}}}}, {id: 'unrelated', name: 'Unease', flags: {}});
+  assert.equal(typeof nightmareRuntime.migrateNightmareUnease, 'function');
+  const pending = structuredClone(fixture.state().characters.a.pending);
+  await nightmareRuntime.migrateNightmareUnease();
+  await nightmareRuntime.migrateNightmareUnease();
+  assert.deepEqual(fixture.actor.items.map(item => item.id), ['unrelated']);
+  assert.deepEqual(fixture.state().characters.a.pending, pending);
 });
 
 test('one batch request covers unresolved sleepers once and never asks a settled actor again', async () => {
@@ -299,19 +343,17 @@ test('settling an hour late uses only the remaining native effect duration despi
   game.time.worldTime = 3700;
   await settleNightmareResult({id: 'r1', actorId: 'a', outcome: 'criticalFailure'});
   assert.deepEqual(fixture.actor.items.map(i => [i.system.duration.unit, i.system.duration.value, i.system.start.value]),
-    [['minutes', 1380, 3700], ['minutes', 1380, 3700]]);
+    [['minutes', 1380, 3700]]);
 });
 
 test('recovering a partially created phobia after its deadline removes it before sticky expiry, including after rewind', async () => {
   const fixture = nativeFixture(); fixture.seed(s => rest(s, 'r1'));
-  const create = fixture.actor.createEmbeddedDocuments;
-  let attempts = 0;
-  fixture.actor.createEmbeddedDocuments = async (...args) => {
-    if (++attempts === 2) throw Error('unease creation failed');
-    return create(...args);
-  };
-  await assert.rejects(settleNightmareResult({id: 'r1', actorId: 'a', outcome: 'criticalFailure'}), /unease/);
+  const save = game.settings.set;
+  let writes = 0;
+  game.settings.set = async (...args) => {if (++writes === 2) throw Error('ledger commit failed'); return save(...args);};
+  await assert.rejects(settleNightmareResult({id: 'r1', actorId: 'a', outcome: 'criticalFailure'}), /ledger commit/);
   assert.equal(fixture.actor.items.length, 1);
+  game.settings.set = save;
   game.time.worldTime = 86500;
   await settleNightmareResult({id: 'r1', actorId: 'a', outcome: 'criticalFailure'});
   assert.equal(fixture.actor.items.length, 0);

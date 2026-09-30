@@ -106,12 +106,25 @@ export function reserveResult(state, {id, actorId, outcome}) {
     until: record.at + NIGHTMARE_DAY, status: 'applying', lucidResearch: outcome === 'criticalSuccess'};
 }
 
-export function finishResult(state, {id, actorId}) {
+/** Revalidate the exact native proposal in the same write that reserves its application. */
+export function reserveRecordedResult(state, {id, actorId, messageId}) {
+  const record = session(state, id);
+  if (record.results?.[actorId]) return record.results[actorId];
+  const suggestion = record.suggestions?.[actorId];
+  if (!suggestion || !outcomes.has(suggestion.outcome)) throw new Error(t('Nightmare.RecordedSaveRequired'));
+  if (!messageId || suggestion.messageId !== messageId) throw new Error(t('Nightmare.ProposalChanged'));
+  const result = reserveResult(state, {id, actorId, outcome: suggestion.outcome});
+  result.messageId = messageId;
+  return result;
+}
+
+export function finishResult(state, {id, actorId, preexistingConditionIds = []}) {
   const record = session(state, id), result = record.results?.[actorId];
   if (!result || result.status === 'complete') return;
   const pc = character(state, actorId);
   if (result.applyPhobia) pc.chapters[record.chapter] = {phobiaAt: result.at, sessionId: id};
-  if (['failure', 'criticalFailure'].includes(result.effectiveOutcome)) pc.pending = {sessionId: id, at: result.at, until: result.until};
+  if (['failure', 'criticalFailure'].includes(result.effectiveOutcome)) pc.pending = {sessionId: id, at: result.at, until: result.until,
+    preexistingConditionIds: unique(preexistingConditionIds)};
   result.status = 'complete';
   if (record.actorIds.every(actor => record.results[actor]?.status === 'complete')) record.status = 'complete';
 }

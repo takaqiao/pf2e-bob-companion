@@ -80,7 +80,7 @@ test('open console preserves drafts on status refresh, coalesces clock minutes a
     pf2e:{worldClock:{worldTime}},settings:{get(){return cfg;}},modules:new Map([['pf2e-bob-companion',{api:{getCalendarStatus(){calendarReads++;return {available:false,label:'未安装日历'};}}}]])};
   const consolePanel=await panel.openPanel();
   assert.match(node('content').innerHTML,/>Overview<\/button>/);
-  assert.match(node('content').innerHTML,/>Adventure tools<\/button>/);
+  assert.match(node('content').innerHTML,/>Maintenance tools<\/button>/);
   assert.match(node('content').innerHTML,/<details class="bob-calendar-tools">/);
   consolePanel.draft.set('phase','day');
   await consolePanel.act('refresh');
